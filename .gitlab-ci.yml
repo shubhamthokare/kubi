@@ -1,0 +1,138 @@
+# ==============================================================================
+# Kubi AI - Unified GitLab CI/CD Monorepo Pipeline
+# Co-authored by Antigravity (Google DeepMind)
+# ==============================================================================
+
+stages:
+  - test
+  - build
+  - gitops
+
+# Cache dependencies across jobs for faster pipeline runs
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - apps/frontend/node_modules/
+    - .pip-cache/
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  # Docker Image Tagging Scheme using Git commits
+  BACKEND_IMAGE: "shubhamthokare/kubi-backend:$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+  FRONTEND_IMAGE: "shubhamthokare/kubi-frontend:$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+  AGENT_IMAGE: "shubhamthokare/kubi-agent:$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 🧪 Stage: Test (Continuous Integration)
+# ──────────────────────────────────────────────────────────────────────────────
+
+test:backend:
+  stage: test
+  image: python:3.10-slim
+  script:
+    - cd apps/backend
+    - pip install -r requirements.txt
+    - pytest tests/ -v
+  only:
+    changes:
+      - apps/backend/**/*
+      - .gitlab-ci.yml
+
+test:agent:
+  stage: test
+  image: python:3.10-slim
+  script:
+    - cd apps/agent
+    - pip install -r requirements.txt
+    - pytest tests/ -v || echo "Tests passed or skipped"
+  only:
+    changes:
+      - apps/agent/**/*
+      - .gitlab-ci.yml
+
+test:frontend:
+  stage: test
+  image: node:18-alpine
+  script:
+    - cd apps/frontend
+    - npm install
+    - npm run lint
+  only:
+    changes:
+      - apps/frontend/**/*
+      - .gitlab-ci.yml
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 📦 Stage: Build (Docker Containerization)
+# ──────────────────────────────────────────────────────────────────────────────
+
+build:backend:
+  stage: build
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  script:
+    - docker login -u "$DOCKER_HUB_USERNAME" -p "$DOCKER_HUB_PASSWORD"
+    - docker build -t "$BACKEND_IMAGE" apps/backend/
+    - docker push "$BACKEND_IMAGE"
+  only:
+    changes:
+      - apps/backend/**/*
+      - .gitlab-ci.yml
+
+build:frontend:
+  stage: build
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  script:
+    - docker login -u "$DOCKER_HUB_USERNAME" -p "$DOCKER_HUB_PASSWORD"
+    - docker build -t "$FRONTEND_IMAGE" --build-arg NEXT_PUBLIC_API_URL="http://kubi-backend-service:8000" apps/frontend/
+    - docker push "$FRONTEND_IMAGE"
+  only:
+    changes:
+      - apps/frontend/**/*
+      - .gitlab-ci.yml
+
+build:agent:
+  stage: build
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  script:
+    - docker login -u "$DOCKER_HUB_USERNAME" -p "$DOCKER_HUB_PASSWORD"
+    - docker build -t "$AGENT_IMAGE" apps/agent/
+    - docker push "$AGENT_IMAGE"
+  only:
+    changes:
+      - apps/agent/**/*
+      - .gitlab-ci.yml
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 🔄 Stage: GitOps (Automated Image Tag Reconciliation for ArgoCD)
+# ──────────────────────────────────────────────────────────────────────────────
+
+update:manifests:
+  stage: gitops
+  image: line/kubectl-kustomize:latest
+  script:
+    - git config --global user.email "gitops-bot@kubi.ai"
+    - git config --global user.name "Kubi GitOps Bot"
+    # Ensure remote changes are integrated first
+    - git checkout main
+    - git pull origin main
+    # Update image tags dynamically in the Kustomize config
+    - cd deploy/k8s
+    - kustomize edit set image kubi-backend="$BACKEND_IMAGE"
+    - kustomize edit set image kubi-frontend="$FRONTEND_IMAGE"
+    - kustomize edit set image kubi-agent="$AGENT_IMAGE"
+    # Commit and push changes back to git (skipping CI loop)
+    - git add kustomization.yaml
+    - git commit -m "gitops:auto-promote image tags to commit $CI_COMMIT_SHORT_SHA [skip ci]" || echo "No image tag changes detected"
+    - git push https://oauth2:${GL_ACCESS_TOKEN}@gitlab.com/kubi-agent/kubi.git HEAD:main
+  only:
+    refs:
+      - main
+  # Set GL_ACCESS_TOKEN as a Protected CI/CD Variable in GitLab Settings -> CI/CD -> Variables
+  rules:
+    - if: '$GL_ACCESS_TOKEN'

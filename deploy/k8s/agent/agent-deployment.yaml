@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubi-agent
+  namespace: kubi
+  labels:
+    app: kubi-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubi-agent
+  template:
+    metadata:
+      labels:
+        app: kubi-agent
+    spec:
+      serviceAccountName: kubi-agent-sa
+      containers:
+        - name: agent
+          image: kubi-agent:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: kubi-agent-config
+          env:
+            # ── Arize Tracing ─────────────────────────────────────────
+            - name: ENVIRONMENT
+              value: "production"
+            - name: ARIZE_SPACE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: kubi-secrets
+                  key: ARIZE_SPACE_ID
+                  optional: true
+            - name: ARIZE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kubi-secrets
+                  key: ARIZE_API_KEY
+                  optional: true
+            - name: ARIZE_PROJECT_NAME
+              value: "kubi-prod-agent"
+          resources:
+            requests:
+              memory: "100Mi"
+              cpu: "250m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"

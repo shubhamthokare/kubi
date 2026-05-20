@@ -1,0 +1,13 @@
+{{- if .Values.mongodb.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kubi.fullname" . }}-mongodb-pvc
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.mongodb.persistence.size }}
+{{- end }}

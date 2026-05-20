@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: oklch(0.12 0.03 236);
+  --color-foreground: oklch(0.98 0.01 236);
+  --color-card: oklch(0.12 0.03 236);
+  --color-card-foreground: oklch(0.98 0.01 236);
+  --color-popover: oklch(0.12 0.03 236);
+  --color-popover-foreground: oklch(0.98 0.01 236);
+  --color-primary: oklch(0.64 0.17 256);
+  --color-primary-foreground: oklch(0.12 0.03 236);
+  --color-secondary: oklch(0.25 0.05 236);
+  --color-secondary-foreground: oklch(0.98 0.01 236);
+  --color-muted: oklch(0.25 0.05 236);
+  --color-muted-foreground: oklch(0.7 0.05 236);
+  --color-accent: oklch(0.25 0.05 236);
+  --color-accent-foreground: oklch(0.98 0.01 236);
+  --color-destructive: oklch(0.4 0.18 20);
+  --color-destructive-foreground: oklch(0.98 0.01 236);
+  --color-border: oklch(0.25 0.05 236);
+  --color-input: oklch(0.25 0.05 236);
+  --color-ring: oklch(0.5 0.2 256);
+  --radius-xl: 0.75rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+    border-width: 0;
+    border-style: solid;
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+/* Custom Glassmorphism adapted for new theme */
+.glass {
+  @apply bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl;
+}
+
+.text-gradient {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-violet-400;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; color: black !important; }
+  .glass { background: white !important; border: none !important; box-shadow: none !important; color: black !important; }
+  .prose-invert { color: black !important; }
+  .prose-headings { color: black !important; }
+  .prose-p { color: #333 !important; }
+}

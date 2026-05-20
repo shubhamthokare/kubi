@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubi-agent-config
+  namespace: kubi
+data:
+  KUBI_BACKEND_URL: "http://kubi-backend-service:8000" # URL of the main Kubi backend cluster.
+  CLUSTER_ID: "remote-cluster-1"
+  TARGET_NAMESPACE: "default"
+  SCAN_INTERVAL: "30"

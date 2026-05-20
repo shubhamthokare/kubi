@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubi-backend
+  namespace: kubi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubi-backend
+  template:
+    metadata:
+      labels:
+        app: kubi-backend
+    spec:
+      serviceAccountName: kubi-backend-sa
+      containers:
+      - name: backend
+        image: kubi-backend:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        env:
+        # ── Secrets ──────────────────────────────────────────────
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kubi-secrets
+              key: GEMINI_API_KEY
+        # ── Arize Tracing ─────────────────────────────────────────
+        - name: ENVIRONMENT
+          value: "production"
+        - name: ARIZE_SPACE_ID
+          valueFrom:
+            secretKeyRef:
+              name: kubi-secrets
+              key: ARIZE_SPACE_ID
+              optional: true
+        - name: ARIZE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kubi-secrets
+              key: ARIZE_API_KEY
+              optional: true
+        - name: ARIZE_PROJECT_NAME
+          value: "kubi-prod-backend"
+        # ── Config values from ConfigMap ──────────────────────────
+        - name: MONGODB_URL
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: MONGODB_URL
+        - name: DATABASE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: DATABASE_NAME
+        - name: AGENT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: AGENT_URL
+        - name: CORS_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: CORS_ORIGINS
+        # ── Elasticsearch ─────────────────────────────────────────
+        - name: ELASTICSEARCH_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: ELASTICSEARCH_HOST
+        - name: ELASTICSEARCH_INDEX
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: ELASTICSEARCH_INDEX
+        - name: ELASTICSEARCH_INDEX_LOGS
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: ELASTICSEARCH_INDEX_LOGS
+        - name: ELASTICSEARCH_INDEX_EVENTS
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: ELASTICSEARCH_INDEX_EVENTS
+        - name: ELASTICSEARCH_INDEX_RCA
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: ELASTICSEARCH_INDEX_RCA
+        - name: ELASTICSEARCH_INDEX_REMEDIATION
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: ELASTICSEARCH_INDEX_REMEDIATION
+        # Auth — empty by default for dev (security disabled in ES)
+        - name: ELASTICSEARCH_USERNAME
+          value: ""
+        - name: ELASTICSEARCH_PASSWORD
+          value: ""

@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubi-frontend
+  namespace: kubi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubi-frontend
+  template:
+    metadata:
+      labels:
+        app: kubi-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: kubi-frontend:latest # Build this from fe/Dockerfile
+        env:
+        - name: NEXT_PUBLIC_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: BACKEND_URL
+        ports:
+        - containerPort: 80

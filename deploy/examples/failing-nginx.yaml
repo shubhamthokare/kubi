@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: failing-nginx
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: failing-nginx
+  template:
+    metadata:
+      labels:
+        app: failing-nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        command: ["sh", "-c", "exit 1"]

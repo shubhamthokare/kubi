@@ -1,0 +1,143 @@
+version: '3.8'
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    container_name: kubi-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - kubi-network
+    healthcheck:
+      test: curl -s http://localhost:9200 >/dev/null || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.4
+    container_name: kubi-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    networks:
+      - kubi-network
+    healthcheck:
+      test: curl -s http://localhost:5601 >/dev/null || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:latest
+    container_name: kubi-mongodb
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - kubi-network
+
+  be:
+    build:
+      context: ../../apps/backend
+      dockerfile: Dockerfile
+    container_name: kubi-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGODB_URL=mongodb://mongodb:27017
+      - DATABASE_NAME=kubeguardian
+      - AGENT_URL=http://agent:8080
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ELASTICSEARCH_HOST=http://elasticsearch:9200
+      - ELASTICSEARCH_INDEX=kubiguard-incidents
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - ARIZE_SPACE_ID=${ARIZE_SPACE_ID}
+      - ARIZE_API_KEY=${ARIZE_API_KEY}
+      - ARIZE_PROJECT_NAME=kubi-prod-backend
+      - PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT}
+    depends_on:
+      - mongodb
+      - elasticsearch
+    networks:
+      - kubi-network
+
+  agent:
+    build:
+      context: ../../apps/agent
+      dockerfile: Dockerfile
+    container_name: kubi-agent
+    ports:
+      - "8080:8080"
+    environment:
+      - KUBI_BACKEND_URL=http://be:8000
+      - CLUSTER_ID=local-minikube
+      - TARGET_NAMESPACE=*
+      - SCAN_INTERVAL=30
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - ARIZE_SPACE_ID=${ARIZE_SPACE_ID}
+      - ARIZE_API_KEY=${ARIZE_API_KEY}
+      - ARIZE_PROJECT_NAME=kubi-prod-agent
+      - PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT}
+    volumes:
+      - C:\Users\shubh\.minikube:/root/.minikube:ro
+      - ../kubeconfig:/root/.kube/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - be
+    networks:
+      - kubi-network
+
+  fe:
+    build:
+      context: ../../apps/frontend
+      dockerfile: Dockerfile
+    container_name: kubi-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api
+      - BACKEND_URL=http://be:8000
+    depends_on:
+      - be
+    networks:
+      - kubi-network
+  
+  playwright:
+    build: ../../
+    container_name: kubeguard-playwright
+
+    working_dir: /app
+
+    volumes:
+      - ../../:/app
+
+    environment:
+      - KUBECONFIG_CONTENT=${KUBECONFIG_CONTENT}
+      - APP_URL=http://host.docker.internal:3000
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    network_mode: host
+
+    command: npx playwright test --headed
+
+volumes:
+  mongo-data:
+  elasticsearch-data:
+
+networks:
+  kubi-network:
+    name: kubi-network

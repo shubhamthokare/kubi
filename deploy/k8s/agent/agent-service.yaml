@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubi-agent-service
+  namespace: kubi
+  labels:
+    app: kubi-agent
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app: kubi-agent

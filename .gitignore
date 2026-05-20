@@ -1,0 +1,157 @@
+# ==============================================================================
+# Kubi AI - Workspace .gitignore
+# Co-authored by Antigravity (Google DeepMind)
+# ==============================================================================
+
+# ──────────────────────────────────────────────────────────────────────────────
+# OS & System Files
+# ──────────────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Editors & IDEs
+# ──────────────────────────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+*.bak
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Python (Backend & Agent)
+# ──────────────────────────────────────────────────────────────────────────────
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+venv/
+ENV/
+env/
+pyvenv.cfg
+.python-version
+
+# Testing & QA
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.hypothesis/
+.ruamel/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Node.js & Web (Frontend)
+# ──────────────────────────────────────────────────────────────────────────────
+# Dependencies
+node_modules/
+jspm_packages/
+.pnp
+.pnp.*
+
+# Next.js build outputs
+.next/
+out/
+
+# Production build outputs
+/build
+/dist
+
+# TS Build Info
+*.tsbuildinfo
+
+# Debugging logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Vercel & Netlify
+.vercel
+.netlify
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Testing & Test Artifacts
+# ──────────────────────────────────────────────────────────────────────────────
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+deploy/playwright/test-results/
+deploy/playwright/playwright-report/
+deploy/playwright/node_modules/
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Environment Configs & Secrets (DO NOT COMMIT SENSITIVE KEYS)
+# ──────────────────────────────────────────────────────────────────────────────
+# Local environment configs
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+apps/backend/.env
+apps/frontend/.env.local
+deploy/k8s/base/.env
+
+# Allow sample template envs
+!**/.env.example
+
+# SSL Keys & Certificates
+*.pem
+*.crt
+*.key
+*.pub
+*.p12
+
+# Kubernetes Secrets
+kubeconfig*
+secrets.dev.yaml

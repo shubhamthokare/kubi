@@ -1,0 +1,424 @@
+{
+  "info": {
+    "_postman_id": "kubi-ai-collection",
+    "name": "Kubi AI - Complete API Collection",
+    "description": "All REST APIs for the Kubi AI autonomous Kubernetes incident recovery platform.\n\n## Services\n- **Backend API** — FastAPI on port 8000, prefix `/api`\n- **Agent API** — FastAPI on port 8080 (in-cluster)\n\n## Quick Setup\n1. Set `base_url` variable to your backend URL (e.g. `http://127.0.0.1:55287` via minikube tunnel)\n2. Set `agent_url` variable to agent URL (e.g. `http://kubi-agent-service:8080` inside cluster)\n3. Set `gemini_api_key` if testing Gemini validation",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:55287", "type": "string", "description": "Frontend/proxy URL (via minikube tunnel)" },
+    { "key": "backend_direct", "value": "http://localhost:8000", "type": "string", "description": "Direct backend URL (if port-forwarded)" },
+    { "key": "agent_url", "value": "http://kubi-agent-service:8080", "type": "string", "description": "Agent URL (internal cluster DNS)" },
+    { "key": "cluster_id", "value": "kubi-internal-agent", "type": "string" },
+    { "key": "plan_id", "value": "replace-with-plan-id", "type": "string" },
+    { "key": "incident_id", "value": "replace-with-incident-object-id", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "🏠 Root & Health",
+      "item": [
+        {
+          "name": "Root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/", "host": ["{{base_url}}"], "path": [""] },
+            "description": "Welcome endpoint — verifies the API server is reachable."
+          }
+        },
+        {
+          "name": "Health Check (root)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] },
+            "description": "Root-level health check. Returns `{status: healthy}`."
+          }
+        },
+        {
+          "name": "Health Check (API router)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/health", "host": ["{{base_url}}"], "path": ["api", "health"] },
+            "description": "Router-level health check under `/api` prefix."
+          }
+        }
+      ]
+    },
+    {
+      "name": "⚙️ Settings",
+      "item": [
+        {
+          "name": "Get Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/settings", "host": ["{{base_url}}"], "path": ["api", "settings"] },
+            "description": "Returns the full system configuration including registered clusters, scan interval, Gemini model, GitLab config, and auto-remediation flags. Credentials (gemini_api_key, gitlab_private_token) are masked with bullets."
+          }
+        },
+        {
+          "name": "Update Settings",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"namespaces\": [\"default\", \"kubi\"],\n  \"scan_interval\": 30,\n  \"gemini_model\": \"gemini-1.5-pro\",\n  \"gemini_api_key\": \"YOUR_GEMINI_KEY\",\n  \"gitlab_enabled\": false,\n  \"gitlab_api_url\": \"https://gitlab.com/api/v4\",\n  \"gitlab_private_token\": \"\",\n  \"auto_remediation\": false,\n  \"clusters\": [\n    {\n      \"id\": \"kubi-internal-agent\",\n      \"name\": \"kubi-cluster\",\n      \"auth_type\": \"agent\",\n      \"agent_url\": \"http://kubi-agent-service:8080\",\n      \"namespace\": \"*\",\n      \"kubeconfig\": \"\"\n    }\n  ],\n  \"active_cluster_id\": \"kubi-internal-agent\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/settings", "host": ["{{base_url}}"], "path": ["api", "settings"] },
+            "description": "Persists all system settings to MongoDB. Upserts a single `system_config` document. Masked credential values (bullets) are preserved from existing DB record."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔍 Scanning & Incidents",
+      "item": [
+        {
+          "name": "Trigger Manual Scan",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-cluster-id", "value": "{{cluster_id}}", "description": "Optional — scope scan to a specific registered cluster" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/scan?namespaces=default&namespaces=kubi",
+              "host": ["{{base_url}}"],
+              "path": ["api", "scan"],
+              "query": [
+                { "key": "namespaces", "value": "default" },
+                { "key": "namespaces", "value": "kubi" }
+              ]
+            },
+            "description": "Runs `IncidentDetectionWorkflow` immediately. Pass `namespaces` query params to scope the scan. Omit for all namespaces. Include `x-cluster-id` header to use a specific registered cluster's agent."
+          }
+        },
+        {
+          "name": "Trigger Scan (all namespaces)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/scan", "host": ["{{base_url}}"], "path": ["api", "scan"] },
+            "description": "Scan all namespaces on the default/first configured cluster."
+          }
+        },
+        {
+          "name": "List Incidents",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-cluster-id", "value": "{{cluster_id}}", "description": "Optional — filter incidents by cluster" }
+            ],
+            "url": { "raw": "{{base_url}}/api/incidents", "host": ["{{base_url}}"], "path": ["api", "incidents"] },
+            "description": "Returns all incidents from MongoDB sorted by newest first. Optionally filter by cluster using the `x-cluster-id` header."
+          }
+        },
+        {
+          "name": "Get Incident Postmortem Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/incidents/{{incident_id}}/report",
+              "host": ["{{base_url}}"],
+              "path": ["api", "incidents", "{{incident_id}}", "report"]
+            },
+            "description": "Generates a professional markdown postmortem report for a specific incident using Gemini AI. Includes execution results if a remediation plan exists."
+          }
+        },
+        {
+          "name": "Ingest Incident (from Agent)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pod_name\": \"my-app-pod-abc123\",\n  \"namespace\": \"default\",\n  \"cluster_id\": \"kubi-internal-agent\",\n  \"status\": \"active\",\n  \"phase\": \"CrashLoopBackOff\",\n  \"title\": \"Incident: my-app-pod-abc123 failing in kubi-internal-agent\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/incidents/ingest", "host": ["{{base_url}}"], "path": ["api", "incidents", "ingest"] },
+            "description": "Used by external Kubi Agents to push incidents into the backend. Deduplicates by pod_name + cluster_id + status=active. Also attempts to index in Elasticsearch."
+          }
+        },
+        {
+          "name": "Ingest Incident (v1 alias)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pod_name\": \"my-app-pod-abc123\",\n  \"namespace\": \"default\",\n  \"cluster_id\": \"kubi-internal-agent\",\n  \"status\": \"active\",\n  \"phase\": \"CrashLoopBackOff\",\n  \"title\": \"Incident: my-app-pod-abc123 failing\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/incidents/ingest", "host": ["{{base_url}}"], "path": ["api", "v1", "incidents", "ingest"] },
+            "description": "Alternate versioned path for incident ingestion — same handler as `/api/incidents/ingest`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "📋 Remediation Plans",
+      "item": [
+        {
+          "name": "List All Plans",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/plans", "host": ["{{base_url}}"], "path": ["api", "plans"] },
+            "description": "Returns all pending and completed remediation plans from MongoDB."
+          }
+        },
+        {
+          "name": "Get Plan by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/plans/{{plan_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "plans", "{{plan_id}}"]
+            },
+            "description": "Fetch a specific remediation plan. Returns 404 if not found."
+          }
+        },
+        {
+          "name": "Approve Plan",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/plans/{{plan_id}}/approve",
+              "host": ["{{base_url}}"],
+              "path": ["api", "plans", "{{plan_id}}", "approve"]
+            },
+            "description": "Approves a pending remediation plan and executes the remediation actions against the cluster."
+          }
+        },
+        {
+          "name": "Reject Plan",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/plans/{{plan_id}}/reject",
+              "host": ["{{base_url}}"],
+              "path": ["api", "plans", "{{plan_id}}", "reject"]
+            },
+            "description": "Rejects a pending remediation plan — marks it as rejected without executing any actions."
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Cluster Stats & Resources",
+      "item": [
+        {
+          "name": "Get Cluster Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-cluster-id", "value": "{{cluster_id}}", "description": "Optional — use a specific registered cluster" }
+            ],
+            "url": { "raw": "{{base_url}}/api/stats", "host": ["{{base_url}}"], "path": ["api", "stats"] },
+            "description": "Returns real-time cluster statistics: node count, pod counts (running/failed/pending), namespace count, uptime, and calculated average incident resolution time."
+          }
+        },
+        {
+          "name": "Get All Resources",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-cluster-id", "value": "{{cluster_id}}", "description": "Optional — use a specific registered cluster" }
+            ],
+            "url": { "raw": "{{base_url}}/api/resources", "host": ["{{base_url}}"], "path": ["api", "resources"] },
+            "description": "Returns a flat list of all namespaces, deployments, and pods in the cluster. Used by the frontend for filtering dropdowns."
+          }
+        }
+      ]
+    },
+    {
+      "name": "📑 Reports",
+      "item": [
+        {
+          "name": "List All Reports",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/reports", "host": ["{{base_url}}"], "path": ["api", "reports"] },
+            "description": "Returns all generated postmortem reports stored in MongoDB, sorted newest first."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔐 Validation",
+      "item": [
+        {
+          "name": "Validate Cluster — Agent Mode",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"auth_type\": \"agent\",\n  \"agent_url\": \"http://kubi-agent-service:8080\",\n  \"kubeconfig\": \"\",\n  \"api_endpoint\": \"\",\n  \"ca_cert\": \"\",\n  \"client_cert\": \"\",\n  \"client_key\": \"\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/clusters/validate", "host": ["{{base_url}}"], "path": ["api", "clusters", "validate"] },
+            "description": "Tests connectivity to a Kubi Agent. Calls `GET {agent_url}/stats` — returns success if HTTP 200."
+          }
+        },
+        {
+          "name": "Validate Cluster — Kubeconfig Mode",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"auth_type\": \"kubeconfig\",\n  \"kubeconfig\": \"apiVersion: v1\\nkind: Config\\nclusters:\\n- name: minikube\\n  cluster:\\n    server: https://127.0.0.1:8443\\ncurrent-context: minikube\\n\",\n  \"ca_cert\": \"\",\n  \"client_cert\": \"\",\n  \"client_key\": \"\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/clusters/validate", "host": ["{{base_url}}"], "path": ["api", "clusters", "validate"] },
+            "description": "Tests connectivity using a pasted kubeconfig YAML. Optionally patch external cert/key files by including `ca_cert`, `client_cert`, `client_key` PEM strings."
+          }
+        },
+        {
+          "name": "Validate Cluster — Direct TLS Mode",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"auth_type\": \"direct\",\n  \"api_endpoint\": \"https://192.168.49.2:8443\",\n  \"ca_cert\": \"-----BEGIN CERTIFICATE-----\\n...\",\n  \"client_cert\": \"-----BEGIN CERTIFICATE-----\\n...\",\n  \"client_key\": \"-----BEGIN RSA PRIVATE KEY-----\\n...\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/clusters/validate", "host": ["{{base_url}}"], "path": ["api", "clusters", "validate"] },
+            "description": "Tests connectivity to a Kubernetes API Server directly using TLS credentials. Builds a temporary kubeconfig and calls `list_node()`."
+          }
+        },
+        {
+          "name": "Validate Gemini API Key",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gemini_api_key\": \"YOUR_GEMINI_API_KEY\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/gemini/validate", "host": ["{{base_url}}"], "path": ["api", "gemini", "validate"] },
+            "description": "Tests connectivity to Google Gemini API. Pass an API key to test a new one, or leave body empty to use the currently saved key."
+          }
+        },
+        {
+          "name": "Validate GitLab Connection",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gitlab_api_url\": \"https://gitlab.com/api/v4\",\n  \"gitlab_private_token\": \"YOUR_GITLAB_TOKEN\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/gitlab/validate", "host": ["{{base_url}}"], "path": ["api", "gitlab", "validate"] },
+            "description": "Tests GitLab API connectivity. Validates the private token against the provided GitLab instance URL."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🤖 Agent API (Direct)",
+      "description": "These endpoints are served by the Kubi Agent pod (port 8080). Access requires port-forwarding or in-cluster network. Use `kubectl port-forward svc/kubi-agent-service 8080:8080 -n kubi`.",
+      "item": [
+        {
+          "name": "Agent Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{agent_url}}/healthz", "host": ["{{agent_url}}"], "path": ["healthz"] },
+            "description": "Returns `{status: ok, cluster_id: ...}`. Used by the backend to verify agent connectivity."
+          }
+        },
+        {
+          "name": "Agent — Get Cluster Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{agent_url}}/stats", "host": ["{{agent_url}}"], "path": ["stats"] },
+            "description": "Returns live cluster stats directly from the Kubernetes API via in-cluster RBAC: node count, pod phases, namespace count, cluster uptime."
+          }
+        },
+        {
+          "name": "Agent — Get All Resources",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{agent_url}}/resources", "host": ["{{agent_url}}"], "path": ["resources"] },
+            "description": "Returns all namespaces, deployments, and pods in the cluster."
+          }
+        },
+        {
+          "name": "Agent — List Failed Pods",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{agent_url}}/failed_pods?namespace=*",
+              "host": ["{{agent_url}}"],
+              "path": ["failed_pods"],
+              "query": [{ "key": "namespace", "value": "*", "description": "Use '*' for all namespaces or specify e.g. 'default'" }]
+            },
+            "description": "Returns all pods that are not in Running or Succeeded state. Includes crash reason, message, restart count. Used by the backend background scanner."
+          }
+        },
+        {
+          "name": "Agent — Get Pod Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{agent_url}}/logs/default/my-pod-name?tail_lines=100",
+              "host": ["{{agent_url}}"],
+              "path": ["logs", "default", "my-pod-name"],
+              "query": [{ "key": "tail_lines", "value": "100" }]
+            },
+            "description": "Fetches the last N lines of logs from a specific pod. Falls back to container status diagnostics if the pod is not running."
+          }
+        },
+        {
+          "name": "Agent — Restart Deployment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{agent_url}}/actions/restart/default/my-deployment",
+              "host": ["{{agent_url}}"],
+              "path": ["actions", "restart", "default", "my-deployment"]
+            },
+            "description": "Triggers a rollout restart of a deployment by patching its `restartedAt` annotation. Returns `{success, message}`."
+          }
+        },
+        {
+          "name": "Agent — Delete Pod",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{agent_url}}/actions/pod/default/my-pod-abc123",
+              "host": ["{{agent_url}}"],
+              "path": ["actions", "pod", "default", "my-pod-abc123"]
+            },
+            "description": "Deletes a specific pod by name and namespace. Kubernetes will recreate it if managed by a Deployment/ReplicaSet."
+          }
+        },
+        {
+          "name": "Agent — Apply Manifest",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"manifest\": \"apiVersion: apps/v1\\nkind: Deployment\\nmetadata:\\n  name: my-app\\n  namespace: default\\nspec:\\n  replicas: 1\\n  selector:\\n    matchLabels:\\n      app: my-app\\n  template:\\n    metadata:\\n      labels:\\n        app: my-app\\n    spec:\\n      containers:\\n      - name: my-app\\n        image: nginx:latest\\n\"\n}"
+            },
+            "url": { "raw": "{{agent_url}}/actions/apply", "host": ["{{agent_url}}"], "path": ["actions", "apply"] },
+            "description": "Applies a raw Kubernetes YAML manifest string via `kubectl apply`. Used by RemediationWorkflow to deploy fixes."
+          }
+        }
+      ]
+    }
+  ]
+}

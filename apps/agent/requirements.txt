@@ -1,0 +1,9 @@
+kubernetes==29.0.0
+requests==2.31.0
+fastapi==0.109.0
+uvicorn==0.27.0
+
+# Arize AX tracing
+arize-otel>=0.8.0
+opentelemetry-instrumentation-fastapi>=0.45b0
+opentelemetry-instrumentation-requests>=0.45b0

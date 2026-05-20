@@ -1,0 +1,32 @@
+sequenceDiagram
+    actor User
+    participant FE as React Next.js Frontend
+    participant BE as FastAPI Backend
+    participant Agent as Kubi Agent API
+    participant K8s as K8s API Server
+
+    User->>FE: Inputs: "kubectl get pods -n demo"
+    
+    rect rgb(30, 30, 30)
+    FE->>BE: POST /api/execute
+    Note right of FE: Headers: { x-cluster-id: "prod-cluster-1" }<br/>Body: { "cmd": "kubectl get pods -n demo" }
+    end
+
+    BE->>BE: Validate x-cluster-id & Route
+    
+    rect rgb(30, 30, 30)
+    BE->>Agent: Forward POST to Port 8080
+    Note right of BE: Body: { "cmd": "kubectl get pods -n demo" }
+    end
+
+    Agent->>Agent: Parse string OR execute via subprocess
+    
+    rect rgb(30, 30, 30)
+    Agent->>K8s: K8s API Call
+    Note right of Agent: e.g., GET /api/v1/namespaces/demo/pods
+    end
+    
+    K8s-->>Agent: 200 OK (Pod Data JSON)
+    Agent-->>BE: Formatted Text or JSON Output
+    BE-->>FE: HTTP 200 Response
+    FE-->>User: Renders result on screen

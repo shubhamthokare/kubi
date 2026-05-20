@@ -1,0 +1,19 @@
+fastapi>=0.104.1
+uvicorn>=0.23.2
+kubernetes>=28.1.0
+google-genai>=0.1.2
+pydantic>=2.4.2
+pydantic-settings>=2.0.3
+httpx>=0.25.0
+motor>=3.3.1
+
+# Arize AX tracing
+arize-otel>=0.8.0
+openinference-instrumentation-google-genai>=0.1.0
+opentelemetry-instrumentation-fastapi>=0.45b0
+opentelemetry-instrumentation-requests>=0.45b0
+opentelemetry-instrumentation-httpx>=0.45b0
+
+# Elasticsearch for incident indexing and search
+elasticsearch==8.13.2
+

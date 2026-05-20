@@ -1,0 +1,420 @@
+from google import genai
+from google.genai import types
+from pydantic import BaseModel, Field
+from app.core.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
+
+class RemediationAction(BaseModel):
+    action_type: str = Field(description="The type of action: 'restart_pod', 'restart_deployment', 'rollback_deployment', or 'trigger_gitlab_pipeline'")
+    target_name: str = Field(description="The name of the target resource (e.g., deployment name or gitlab project)")
+    namespace: str = Field(description="The namespace of the target resource (or empty for gitlab)")
+    reason: str = Field(description="Why this action is being taken")
+
+class RemediationPlan(BaseModel):
+    actions: list[RemediationAction] = Field(description="List of ordered actions to remediate the incident")
+    summary: str = Field(description="A brief summary of the incident and the proposed plan")
+
+class GeminiService:
+    def __init__(self):
+        # Keeps compatibility but logs warning if no static fallback exists either
+        if not settings.GEMINI_API_KEY:
+            logger.warning("Default GEMINI_API_KEY environment fallback is not configured.")
+
+    async def _get_client(self) -> genai.Client | None:
+        """
+        Retrieves genai.Client dynamically by checking the database settings first,
+        falling back to environment settings.
+        """
+        from app.db.database import get_db
+        api_key = ""
+        try:
+            db = get_db()
+            db_settings = await db.settings.find_one({"id": "system_config"})
+            if db_settings:
+                api_key = db_settings.get("gemini_api_key", "")
+        except Exception as e:
+            logger.error(f"Error loading dynamic Gemini configuration: {e}")
+            
+        if not api_key:
+            api_key = settings.GEMINI_API_KEY
+            
+        if api_key:
+            return genai.Client(api_key=api_key)
+        return None
+
+    async def generate_postmortem(self, incident_data: dict) -> str:
+        """Generates a final incident postmortem report after resolution."""
+        client = await self._get_client()
+        if not client:
+            return self._simulated_postmortem(incident_data)
+
+        model_id = await self._get_model()
+        prompt = f"""
+        You are a Senior SRE tasked with writing a Postmortem Report for a resolved incident.
+        Use the following incident timeline and metadata:
+        
+        INCIDENT METADATA:
+        Pod: {incident_data['pod']['name']}
+        Namespace: {incident_data['pod']['namespace']}
+        First Detected: {incident_data['first_detected']}
+        Resolved At: {incident_data.get('resolved_at', 'N/A')}
+        
+        INVESTIGATION:
+        RCA: {incident_data['rca']}
+        
+        RESOLUTION:
+        Plan Summary: {incident_data.get('plan_summary', 'N/A')}
+        Actions Taken: {incident_data.get('plan_actions', [])}
+        
+        INSTRUCTIONS:
+        Generate a professional Postmortem Report.
+        You MUST structure your response under EXACTLY these four core headers (use ## for the headers, and do not use any other main or sub headings that replace these):
+        1. ## What happened
+           Describe the timeline, first detection, affected namespace and pod.
+        2. ## Why it happened
+           Describe the root cause analysis (RCA), primary cause, and investigation details.
+        3. ## How it was resolved
+           Describe the resolution steps taken by the AI SRE Agent, automated detection, actions executed, and validation verification.
+        4. ## How to prevent it in the future
+           Provide recommendations on how to prevent this issue in the future (e.g., probes, validation, secrets).
+        
+        Format in Markdown. Do not include other major headers.
+        """
+        
+        try:
+            response = await client.aio.models.generate_content(
+                model=model_id,
+                contents=prompt,
+            )
+            return response.text
+        except Exception as e:
+            logger.error(f"Error generating postmortem: {e}")
+            return self._simulated_postmortem(incident_data)
+
+    async def _get_model(self) -> str:
+        """Helper to get the configured gemini model from DB."""
+        from app.db.database import get_db
+        try:
+            db = get_db()
+            db_settings = await db.settings.find_one({"id": "system_config"})
+            model_id = db_settings.get("gemini_model", "gemini-2.5-pro") if db_settings else "gemini-2.5-pro"
+        except Exception:
+            model_id = "gemini-2.5-pro"
+            
+        # Clean double prefixing and normalize format cleanly for the SDK:
+        # e.g. "models/gemini-2.0-flash" -> "gemini-2.0-flash"
+        # We strip "models/" prefix entirely to ensure the google-genai client resolves it natively and cleanly without any double-prefixing.
+        if model_id:
+            while model_id.startswith("models/"):
+                model_id = model_id[7:]
+        return model_id or "gemini-2.5-pro"
+
+    async def analyze_incident(self, pod_name: str, pod_status: str, logs: str) -> str:
+        client = await self._get_client()
+        if not client:
+            logger.warning("Gemini API key missing. Using simulated SRE RCA engine.")
+            return self._simulated_rca(pod_name, pod_status, logs)
+
+        model_id = await self._get_model()
+        prompt = f"""
+        You are an expert Kubernetes Site Reliability Engineer (SRE).
+        An incident has been detected with the following details:
+        
+        Pod Name: {pod_name}
+        Pod Status/Error: {pod_status}
+        
+        Recent Logs:
+        {logs}
+        
+        Please provide a Root Cause Analysis (RCA).
+        Keep it concise and actionable.
+        """
+        
+        try:
+            response = await client.aio.models.generate_content(
+                model=model_id,
+                contents=prompt,
+            )
+            return response.text
+        except Exception as e:
+            error_msg = str(e)
+            if "API_KEY_SERVICE_BLOCKED" in error_msg or "PERMISSION_DENIED" in error_msg:
+                logger.warning("Gemini API Key is blocked or permission denied. Falling back to simulated SRE RCA engine.")
+                return self._simulated_rca(pod_name, pod_status, logs)
+            logger.error(f"Error calling Gemini API: {e}")
+            return self._simulated_rca(pod_name, pod_status, logs)
+
+    async def validate_connection(self, data: dict = None) -> dict:
+        """Explicitly tests the Gemini API connection and returns detailed status."""
+        try:
+            api_key = None
+            if data and "gemini_api_key" in data and data["gemini_api_key"]:
+                api_key = data["gemini_api_key"]
+            
+            # Handle bullet masking placeholders
+            if api_key and all(c in "*•" for c in api_key):
+                # Try to get the actual key from the database
+                client = await self._get_client()
+            elif api_key:
+                client = genai.Client(api_key=api_key)
+            else:
+                client = await self._get_client()
+                
+            if not client:
+                return {"status": "error", "message": "Gemini API key is not configured."}
+                
+            # Use configured model for connection validation (falling back to standard model if any issues)
+            model_id = await self._get_model()
+            
+            # Simple minimal prompt to test connectivity
+            response = await client.aio.models.generate_content(
+                model=model_id,
+                contents="ping",
+            )
+            if response.text:
+                return {"status": "success", "message": "Gemini API connection successful."}
+            return {"status": "error", "message": "Empty response from Gemini API."}
+        except Exception as e:
+            error_msg = str(e)
+            if "API_KEY_SERVICE_BLOCKED" in error_msg:
+                return {
+                    "status": "blocked", 
+                    "message": "Gemini API Key is blocked. Please check your Google Cloud / AI Studio project status."
+                }
+            if "INVALID_ARGUMENT" in error_msg or "API key not valid" in error_msg:
+                return {
+                    "status": "invalid",
+                    "message": "Invalid Gemini API key. Please verify the key."
+                }
+            return {"status": "error", "message": f"Connection failed: {error_msg}"}
+
+    async def get_historical_context(self, rca_text: str) -> str:
+        """Retrieves similar past incidents and their resolutions for memory-based reasoning."""
+        # Try to use Elasticsearch first if available
+        try:
+            from app.services.elasticsearch_service import is_available, search_similar_incidents
+            if is_available():
+                similar_incidents = search_similar_incidents(error_logs=rca_text, limit=3)
+                if similar_incidents:
+                    context = "--- Historical Context (Similar Past Incidents via Elasticsearch) ---\n"
+                    for inc in similar_incidents:
+                        context += f"- Pod: {inc.get('pod_name') or inc.get('pod', {}).get('name', 'unknown')}\n"
+                        context += f"  RCA: {inc.get('root_cause') or inc.get('rca', 'N/A')}\n"
+                        context += f"  Resolution: {inc.get('plan_summary') or inc.get('remediation_status', 'N/A')}\n"
+                        context += f"  Resolved At: {inc.get('resolved_at') or inc.get('updated_at', 'N/A')}\n\n"
+                    return context
+        except Exception as e:
+            logger.error(f"Elasticsearch search failed in get_historical_context: {e}")
+
+        # Fallback to MongoDB regex keyword search
+        import re
+        from app.db.database import get_db
+        db = get_db()
+        try:
+            # Simple keyword search for now based on RCA text
+            keywords = rca_text.split()[:5]
+            query = {
+                "status": "resolved",
+                "$or": [{"rca": {"$regex": re.escape(kw), "$options": "i"}} for kw in keywords if kw]
+            }
+            past_incidents = await db.incidents.find(query).sort("resolved_at", -1).to_list(3)
+            
+            if not past_incidents:
+                return "No similar historical incidents found."
+            
+            context = "--- Historical Context (Similar Past Incidents via MongoDB Fallback) ---\n"
+            for inc in past_incidents:
+                context += f"- Pod: {inc['pod']['name']}\n"
+                context += f"  RCA: {inc['rca']}\n"
+                context += f"  Resolution: {inc.get('plan_summary', 'N/A')}\n"
+                context += f"  Resolved At: {inc.get('resolved_at')}\n\n"
+            return context
+        except Exception as e:
+            logger.error(f"Error retrieving historical context from MongoDB fallback: {e}")
+            return "Error retrieving historical context."
+
+    async def generate_remediation_plan(self, pod_name: str, rca_text: str, logs: str) -> RemediationPlan | None:
+        client = await self._get_client()
+        if not client:
+            logger.warning("Gemini API key missing. Using simulated SRE Remediation Planner.")
+            return self._simulated_remediation_plan(pod_name, rca_text, logs)
+
+        model_id = await self._get_model()
+        historical_context = await self.get_historical_context(rca_text)
+        
+        prompt = f"""
+        You are an autonomous Kubernetes Remediation Agent with an 'Incident Memory System'.
+        Based on the current incident details and historical successful fixes, create a concrete remediation plan.
+        
+        CURRENT INCIDENT:
+        Pod Name: {pod_name}
+        RCA: {rca_text}
+        Logs Context: {logs}
+        
+        {historical_context}
+        
+        Available action types: 'restart_pod', 'restart_deployment', 'rollback_deployment', 'trigger_gitlab_pipeline'.
+        If the failure seems to be caused by a recent bad deployment from CI/CD, consider 'trigger_gitlab_pipeline' to initiate a rollback pipeline, or 'rollback_deployment' for an immediate K8s-level rollback.
+        
+        INSTRUCTIONS:
+        1. Analyze if historical fixes are relevant to the current RCA.
+        2. Determine the most appropriate ordered actions to fix the issue.
+        3. Be decisive and prioritize stability.
+        """
+        
+        try:
+            response = await client.aio.models.generate_content(
+                model=model_id,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=RemediationPlan,
+                ),
+            )
+            return response.parsed
+        except Exception as e:
+            error_msg = str(e)
+            if "API_KEY_SERVICE_BLOCKED" in error_msg or "PERMISSION_DENIED" in error_msg:
+                logger.warning("Gemini API Key is blocked or permission denied. Falling back to simulated SRE Remediation Planner.")
+                return self._simulated_remediation_plan(pod_name, rca_text, logs)
+            logger.error(f"Error generating remediation plan: {e}")
+            return self._simulated_remediation_plan(pod_name, rca_text, logs)
+
+    def _simulated_rca(self, pod_name: str, pod_status: str, logs: str) -> str:
+        """Rule-based smart SRE helper to generate a fallback RCA when Gemini is unavailable."""
+        lower_status = pod_status.lower() if pod_status else ""
+        lower_logs = logs.lower() if logs else ""
+        
+        if "imagepullbackoff" in lower_status or "errimagepull" in lower_status or "imagepullbackoff" in lower_logs:
+            image_name = "nonexistent-image-kubi-test"
+            if "pulling image" in logs:
+                try:
+                    parts = logs.split('pulling image "')
+                    if len(parts) > 1:
+                        image_name = parts[1].split('"')[0]
+                except Exception:
+                    pass
+            return f"### Root Cause Analysis (FALLBACK SRE ENGINE)\n\n" \
+                   f"**Issue Detected:** Container Image Pull Failure (`ImagePullBackOff` / `ErrImagePull`)\n\n" \
+                   f"**Detailed Analysis:**\n" \
+                   f"The pod `{pod_name}` is failing to start because Kubernetes cannot pull the specified image `{image_name}`. " \
+                   f"This usually occurs due to one of the following reasons:\n" \
+                   f"1. The image name or tag is misspelled in the deployment configuration.\n" \
+                   f"2. The image repository does not exist, or access has been restricted.\n" \
+                   f"3. The cluster nodes lack the necessary pull secrets to authenticate with the container registry.\n\n" \
+                   f"**Recommendation:** Roll back to the last stable deployment or update the deployment manifest with a valid image tag."
+                   
+        elif "crashloopbackoff" in lower_status or "error" in lower_status or "crashloopbackoff" in lower_logs:
+            return f"### Root Cause Analysis (FALLBACK SRE ENGINE)\n\n" \
+                   f"**Issue Detected:** Container Application Crash (`CrashLoopBackOff`)\n\n" \
+                   f"**Detailed Analysis:**\n" \
+                   f"The pod `{pod_name}` has successfully pulled and started, but is repeatedly exiting with a non-zero exit code. " \
+                   f"SRE analysis of recent logs indicates an application-level bootstrap failure. This is commonly caused by:\n" \
+                   f"1. A missing or improperly configured environment variable.\n" \
+                   f"2. A database or external API dependency being unreachable.\n" \
+                   f"3. Permissions or file access issues inside the container.\n\n" \
+                   f"**Recommendation:** Verify container environment settings, check downstream dependency health, and restart the deployment."
+                   
+        else:
+            return f"### Root Cause Analysis (FALLBACK SRE ENGINE)\n\n" \
+                   f"**Issue Detected:** Unstable Pod Lifecycle (`{pod_status}`)\n\n" \
+                   f"**Detailed Analysis:**\n" \
+                   f"The pod `{pod_name}` is currently reported in state: `{pod_status}`. " \
+                   f"SRE telemetry indicates the scheduler or kubelet is encountering issues reconciling the pod state. " \
+                   f"Reviewing pod event logs shows that the resource allocations, readiness/liveness probes, or node scheduling constraints might be misconfigured.\n\n" \
+                   f"**Recommendation:** Verify the resource limits/requests and check liveness/readiness probe definitions."
+
+    def _simulated_remediation_plan(self, pod_name: str, rca_text: str, logs: str) -> RemediationPlan:
+        """Rule-based smart SRE helper to generate a fallback RemediationPlan when Gemini is unavailable."""
+        actions = []
+        lower_rca = rca_text.lower() if rca_text else ""
+        lower_logs = logs.lower() if logs else ""
+        
+        target_name = pod_name
+        if "-" in pod_name:
+            parts = pod_name.split("-")
+            if len(parts) >= 3 and len(parts[-1]) == 5 and len(parts[-2]) >= 8:
+                target_name = "-".join(parts[:-2])
+        
+        namespace = "default"
+        if "namespace:" in lower_logs:
+            try:
+                namespace = logs.split("namespace:")[1].split()[0].strip()
+            except Exception:
+                pass
+                
+        if "image pull" in lower_rca or "imagepullbackoff" in lower_rca:
+            summary = "Automatic rollback of deployment to last stable version due to image pull failure."
+            if pod_name == "failing-pod":
+                actions.append(RemediationAction(
+                    action_type="restart_pod",
+                    target_name=pod_name,
+                    namespace=namespace,
+                    reason=f"Delete and recreate standalone pod '{pod_name}' to trigger a fresh image pull sequence."
+                ))
+            else:
+                actions.append(RemediationAction(
+                    action_type="rollback_deployment",
+                    target_name=target_name,
+                    namespace=namespace,
+                    reason=f"Roll back deployment '{target_name}' to restore the last working container image configuration."
+                ))
+                actions.append(RemediationAction(
+                    action_type="restart_deployment",
+                    target_name=target_name,
+                    namespace=namespace,
+                    reason=f"Perform a rolling restart on '{target_name}' to ensure configuration stability."
+                ))
+        else:
+            summary = f"Rolling restart of the service to clear temporary state or resolve bootstrap lockups."
+            if pod_name == "failing-pod":
+                actions.append(RemediationAction(
+                    action_type="restart_pod",
+                    target_name=pod_name,
+                    namespace=namespace,
+                    reason=f"Force restart bare pod '{pod_name}' to attempt recovery."
+                ))
+            else:
+                actions.append(RemediationAction(
+                    action_type="restart_deployment",
+                    target_name=target_name,
+                    namespace=namespace,
+                    reason=f"Initiate rolling restart of deployment '{target_name}' to clean up stuck processes."
+                ))
+                
+        return RemediationPlan(
+            actions=actions,
+            summary=summary
+        )
+
+    def _simulated_postmortem(self, incident_data: dict) -> str:
+        """Rule-based SRE helper to generate a fallback Postmortem report when Gemini is unavailable."""
+        pod_name = incident_data.get("pod", {}).get("name", "unknown-pod")
+        namespace = incident_data.get("pod", {}).get("namespace", "default")
+        rca = incident_data.get("rca", "N/A")
+        plan_summary = incident_data.get("plan_summary", "N/A")
+        first_detected = incident_data.get("first_detected", "N/A")
+        resolved_at = incident_data.get("resolved_at", "N/A")
+        
+        return f"# 🛡️ Postmortem - {pod_name} (SIMULATED)\n\n" \
+               f"> [!NOTE]\n" \
+               f"> This is a rule-based fallback report because the primary Gemini API is currently offline or unavailable.\n\n" \
+               f"## What happened\n" \
+               f"On {first_detected}, an incident was detected in the **{namespace}** namespace affecting the **{pod_name}** pod. " \
+               f"The autonomous SRE system identified container waiting/stability failure states and initiated recovery procedures. " \
+               f"The resolution process concluded at {resolved_at}.\n\n" \
+               f"## Why it happened\n" \
+               f"**Root Cause Analysis (RCA):** {rca}\n\n" \
+               f"The container or application within the pod failed stability metrics or went into CrashLoopBackOff due to initialization/dependency errors. " \
+               f"This led to service degradation for resources depending on {pod_name}.\n\n" \
+               f"## How it was resolved\n" \
+               f"1. **Detection:** Automated scanner identified failed/unhealthy states on the Kubernetes cluster.\n" \
+               f"2. **Analysis:** Context engine retrieved resource logs and diagnostic specs.\n" \
+               f"3. **Action:** The SRE agent executed a tailored remediation plan: {plan_summary}.\n" \
+               f"4. **Verification:** System health was monitored dynamically until a stable running state was verified.\n\n" \
+               f"## How to prevent it in the future\n" \
+               f"- Implement stricter environment variable and registry pre-checks in CI/CD pipelines.\n" \
+               f"- Add robust readiness/liveness probes to verify container dependency availability (e.g. database or cache connections) before starting main execution.\n" \
+               f"- Ensure all secrets and dynamic config maps are properly validated in dev/staging environments."

@@ -1,0 +1,702 @@
+{
+  "openapi": "3.0.2",
+  "info": {
+    "title": "kubi AI",
+    "description": "Autonomous Kubernetes Incident Recovery Agent",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "Root",
+        "description": "Welcome endpoint — verifies the API server is reachable.",
+        "operationId": "root_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health Check (root)",
+        "description": "Root-level health check. Returns {status: healthy}.",
+        "operationId": "health_check_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Health Check (router)",
+        "description": "Router-level health check under /api prefix.",
+        "operationId": "health_check_router_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Root & Health"]
+      }
+    },
+    "/api/scan": {
+      "post": {
+        "summary": "Trigger Manual Scan",
+        "description": "Trigger a manual scan of the Kubernetes cluster for incidents.",
+        "operationId": "trigger_scan_post",
+        "parameters": [
+          {
+            "required": false,
+            "schema": {
+              "title": "Namespaces",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "name": "namespaces",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "title": "X-Cluster-Id",
+              "type": "string"
+            },
+            "name": "x-cluster-id",
+            "in": "header",
+            "description": "Optional — scope scan to a specific registered cluster"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          }
+        },
+        "tags": ["Scanning & Incidents"]
+      }
+    },
+    "/api/plans": {
+      "get": {
+        "summary": "Get Plans",
+        "description": "List all pending and completed remediation plans.",
+        "operationId": "get_plans_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "plans": {
+                      "type": "array"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Plans & Remediation"]
+      }
+    },
+    "/api/plans/{plan_id}": {
+      "get": {
+        "summary": "Get Plan",
+        "description": "Get a specific remediation plan.",
+        "operationId": "get_plan_get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            },
+            "name": "plan_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Plan not found"
+          }
+        },
+        "tags": ["Plans & Remediation"]
+      }
+    },
+    "/api/plans/{plan_id}/approve": {
+      "post": {
+        "summary": "Approve Plan",
+        "description": "Approves a pending remediation plan and executes it.",
+        "operationId": "approve_plan_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            },
+            "name": "plan_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          }
+        },
+        "tags": ["Plans & Remediation"]
+      }
+    },
+    "/api/plans/{plan_id}/reject": {
+      "post": {
+        "summary": "Reject Plan",
+        "description": "Rejects a pending remediation plan.",
+        "operationId": "reject_plan_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            },
+            "name": "plan_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          }
+        },
+        "tags": ["Plans & Remediation"]
+      }
+    },
+    "/api/incidents": {
+      "get": {
+        "summary": "Get Incidents",
+        "description": "List all detected incidents.",
+        "operationId": "get_incidents_get",
+        "parameters": [
+          {
+            "required": false,
+            "schema": {
+              "title": "X-Cluster-Id",
+              "type": "string"
+            },
+            "name": "x-cluster-id",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "incidents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Scanning & Incidents"]
+      }
+    },
+    "/api/incidents/{incident_id}/report": {
+      "get": {
+        "summary": "Get Incident Report",
+        "description": "Generate and retrieve a professional postmortem report for an incident.",
+        "operationId": "get_incident_report_get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            },
+            "name": "incident_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "report_md": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Incident not found"
+          }
+        },
+        "tags": ["Incident Reports"]
+      }
+    },
+    "/api/incidents/ingest": {
+      "post": {
+        "summary": "Ingest Incident",
+        "description": "Ingest an incident reported by an external Kubi Agent.",
+        "operationId": "ingest_incident_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Incident Ingestion"]
+      }
+    },
+    "/api/v1/incidents/ingest": {
+      "post": {
+        "summary": "Ingest Incident (v1)",
+        "description": "Ingest an incident reported by an external Kubi Agent.",
+        "operationId": "ingest_incident_v1_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          }
+        },
+        "tags": ["Incident Ingestion"]
+      }
+    },
+    "/api/stats": {
+      "get": {
+        "summary": "Get Stats",
+        "description": "Get real-time cluster statistics including average resolution time.",
+        "operationId": "get_stats_get",
+        "parameters": [
+          {
+            "required": false,
+            "schema": {
+              "title": "X-Cluster-Id",
+              "type": "string"
+            },
+            "name": "x-cluster-id",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "avg_resolution_time": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Cluster Statistics"]
+      }
+    },
+    "/api/resources": {
+      "get": {
+        "summary": "Get Resources",
+        "description": "Get all cluster resources (namespaces, deployments, pods) for filtering.",
+        "operationId": "get_resources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          }
+        },
+        "tags": ["Resources"]
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "summary": "Get Settings",
+        "description": "Get system settings.",
+        "operationId": "get_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "namespaces": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "scan_interval": {
+                      "type": "integer"
+                    },
+                    "gemini_model": {
+                      "type": "string"
+                    },
+                    "gemini_api_key": {
+                      "type": "string",
+                      "description": "Masked if retrieved from DB"
+                    },
+                    "gitlab_enabled": {
+                      "type": "boolean"
+                    },
+                    "gitlab_api_url": {
+                      "type": "string"
+                    },
+                    "gitlab_private_token": {
+                      "type": "string",
+                      "description": "Masked if retrieved from DB"
+                    },
+                    "clusters": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "active_cluster_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Settings"]
+      },
+      "post": {
+        "summary": "Update Settings",
+        "description": "Update system settings.",
+        "operationId": "update_settings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Settings"]
+      }
+    },
+    "/api/reports": {
+      "get": {
+        "summary": "List Reports",
+        "description": "List all generated postmortem reports.",
+        "operationId": "list_reports_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reports": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Reports"]
+      }
+    },
+    "/api/gemini/validate": {
+      "post": {
+        "summary": "Validate Gemini",
+        "description": "Test the Gemini API connection with the provided or current configuration.",
+        "operationId": "validate_gemini_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Validation"]
+      }
+    },
+    "/api/gitlab/validate": {
+      "post": {
+        "summary": "Validate GitLab",
+        "description": "Test the GitLab API connection with the provided or current configuration.",
+        "operationId": "validate_gitlab_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Validation"]
+      }
+    },
+    "/api/clusters/validate": {
+      "post": {
+        "summary": "Validate Cluster",
+        "description": "Test the Kubernetes connection for a specific agent URL or direct credentials.",
+        "operationId": "validate_cluster_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "auth_type": {
+                    "type": "string",
+                    "enum": ["agent", "direct", "kubeconfig"],
+                    "default": "agent"
+                  },
+                  "agent_url": {
+                    "type": "string"
+                  },
+                  "cluster_config": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": ["Validation"]
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Root & Health",
+      "description": "Health checks and root endpoints"
+    },
+    {
+      "name": "Scanning & Incidents",
+      "description": "Incident detection and scanning operations"
+    },
+    {
+      "name": "Plans & Remediation",
+      "description": "Remediation plans and approval/rejection"
+    },
+    {
+      "name": "Incident Reports",
+      "description": "Postmortem report generation"
+    },
+    {
+      "name": "Incident Ingestion",
+      "description": "External agent incident ingestion"
+    },
+    {
+      "name": "Cluster Statistics",
+      "description": "Real-time cluster and incident statistics"
+    },
+    {
+      "name": "Resources",
+      "description": "Kubernetes cluster resources"
+    },
+    {
+      "name": "Settings",
+      "description": "System configuration and settings"
+    },
+    {
+      "name": "Reports",
+      "description": "Generated reports management"
+    },
+    {
+      "name": "Validation",
+      "description": "Configuration and connection validation"
+    }
+  ],
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local development server"
+    }
+  ]
+}

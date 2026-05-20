@@ -1,0 +1,50 @@
+# Default values for kubi.
+# This is a YAML-formatted file.
+
+replicaCount: 1
+
+namespace: kubi
+
+backend:
+  image:
+    repository: kubi-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  env:
+    geminiApiKey: "[ENCRYPTION_KEY]"
+    databaseName: "kubi"
+
+frontend:
+  image:
+    repository: kubi-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: LoadBalancer
+    port: 80
+
+mongodb:
+  enabled: true
+  image:
+    repository: mongo
+    tag: latest
+    pullPolicy: IfNotPresent
+  persistence:
+    size: 1Gi
+  service:
+    port: 27017
+
+resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
