@@ -5,7 +5,7 @@ REM Pushes changes, merges into main, pushes main, and deletes other branches.
 setlocal enabledelayedexpansion
 
 echo ==================================================
-echo Kubi AI - GitLab Monorepo Sync, Merge & Clean Up
+echo Kubi AI - GitLab Monorepo Sync, Merge and Clean Up
 echo ==================================================
 echo.
 
