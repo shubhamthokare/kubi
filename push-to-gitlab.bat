@@ -1,11 +1,11 @@
 @echo off
-REM Kubi AI - Monorepo Push to GitLab Script for Windows
-REM Pushes the entire Kubi AI monorepo as a single repository to GitLab
+REM Kubi AI - Monorepo Push, Merge to Main & Clean Up Script for Windows
+REM Pushes changes, merges into main, pushes main, and deletes other branches.
 
 setlocal enabledelayedexpansion
 
 echo ==================================================
-echo Kubi AI - GitLab Monorepo Push
+echo Kubi AI - GitLab Monorepo Sync, Merge & Clean Up
 echo ==================================================
 echo.
 
@@ -20,16 +20,16 @@ if not exist .git (
 )
 
 REM Detect the current active branch
-set CURRENT_BRANCH=
-for /f "tokens=*" %%i in ('git branch --show-current 2^>nul') do set CURRENT_BRANCH=%%i
-if "!CURRENT_BRANCH!"=="" (
-    for /f "tokens=*" %%i in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set CURRENT_BRANCH=%%i
+set STARTING_BRANCH=
+for /f "tokens=*" %%i in ('git branch --show-current 2^>nul') do set STARTING_BRANCH=%%i
+if "!STARTING_BRANCH!"=="" (
+    for /f "tokens=*" %%i in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set STARTING_BRANCH=%%i
 )
-if "!CURRENT_BRANCH!"=="" (
-    set CURRENT_BRANCH=main
+if "!STARTING_BRANCH!"=="" (
+    set STARTING_BRANCH=main
 )
 
-echo Active Branch: !CURRENT_BRANCH!
+echo Starting Branch: !STARTING_BRANCH!
 echo.
 
 echo Checking status...
@@ -46,25 +46,61 @@ if "!COMMIT_MSG!"=="" (
 )
 
 echo Committing changes with message: "!COMMIT_MSG!"
-git commit -m "!COMMIT_MSG!" || true
+git commit -m "!COMMIT_MSG!" || echo No changes to commit (working tree clean)
 
 echo.
-echo Pulling remote changes for branch '!CURRENT_BRANCH!'...
-git pull origin !CURRENT_BRANCH! --allow-unrelated-histories -s recursive -X ours --no-edit || true
+if "!STARTING_BRANCH!"=="main" (
+    echo Pulling remote changes for 'main'...
+    git pull origin main --rebase
+    echo.
+    echo Pushing directly to origin/main...
+    git push origin main
+) else (
+    REM 1. Pull and push to starting branch
+    echo Pulling remote changes for '!STARTING_BRANCH!'...
+    git pull origin !STARTING_BRANCH! --allow-unrelated-histories -s recursive -X ours --no-edit || true
+    echo.
+    echo Pushing to origin/!STARTING_BRANCH!...
+    git push -u origin !STARTING_BRANCH!
+    echo.
 
-echo.
-echo Pushing to origin/!CURRENT_BRANCH!...
-git push -u origin !CURRENT_BRANCH!
+    REM 2. Switch to main and pull latest
+    echo Switching to 'main'...
+    git checkout main
+    echo.
+    echo Pulling latest changes on 'main'...
+    git pull origin main --rebase || true
+    echo.
+
+    REM 3. Merge starting branch
+    echo Merging '!STARTING_BRANCH!' into 'main'...
+    git merge !STARTING_BRANCH! --no-edit
+    echo.
+
+    REM 4. Push main to remote
+    echo Pushing 'main' to origin/main...
+    git push origin main
+    echo.
+
+    REM 5. Clean up local and remote branch
+    echo Cleaning up feature branch '!STARTING_BRANCH!'...
+    echo Deleting local branch '!STARTING_BRANCH!'...
+    git branch -D !STARTING_BRANCH!
+    
+    echo Deleting remote branch 'origin/!STARTING_BRANCH!' on GitLab...
+    git push origin --delete !STARTING_BRANCH! || echo Warning: Could not delete remote branch.
+)
 
 if errorlevel 1 (
-    echo ERROR: GitLab push failed!
+    echo.
+    echo ERROR: GitLab sync/merge process failed!
     pause
     exit /b 1
 )
 
 echo.
 echo ==================================================
-echo SUCCESS! All changes pushed to GitLab (!CURRENT_BRANCH!)
+echo SUCCESS! Merged to main, pushed to GitLab, and cleaned up.
 echo ==================================================
 echo.
 echo Repository Link:
