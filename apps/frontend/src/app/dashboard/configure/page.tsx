@@ -107,6 +107,7 @@ export default function MultiClusterConfigurePage() {
       }
     }
     loadSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const testClusterConnection = async (clusterId: string, clusterObj?: any) => {
