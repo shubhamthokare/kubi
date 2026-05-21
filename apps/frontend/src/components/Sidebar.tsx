@@ -9,11 +9,11 @@ import {
   Settings, 
   Terminal,
   Activity,
-  ChevronRight,
   FileText
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+const menuItems = [
   { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { name: 'Analyzer', icon: Activity, path: '/analyzer' },
   { name: 'Incidents', icon: ShieldAlert, path: '/incidents' },
