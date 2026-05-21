@@ -11,6 +11,9 @@ This document presents a comprehensive visual and structural map of the **Kubi A
 Below is the complete architectural diagram mapping every system interaction, telemetry hook, and persistence layer in the platform.
 
 ```mermaid
+---
+id: b03db450-8943-4eac-9faf-6cfc24679cf8
+---
 graph TD
     %% ─────────────────────────────────────────────────────────────
     %% Phase A: Detection & Telemetry
@@ -34,10 +37,8 @@ graph TD
         A3 -->|4. Check CI/CD Pipelines| B3{"🦊 GitLab API"}
         B3 -->|Get Last Commit & Pipeline Status| B4["🚀 GitLab Deploy Meta"]
         
-        B2 & B4 -->|5. Assemble RAG Context| B5["🧠 Google Gemini LLM<br>(google-genai Client)"]
-        
-        %% Sanitization & Telemetry
-        B5 -.->|6. Local Sanitization<br>(Redact Auth, Keys, & Cookies)| B6("🔒 arize_tracing.py<br>(Sensitive Data Redactor)")
+        B2 & B4 -->|5. Assemble RAG Context| B5["🧠 Google Gemini LLM<br>(google-genai Client)"]        
+        B5 -.->|"6. Local Sanitization<br/>Redact Auth Keys Cookies"| B6["🔒 arize_tracing.py<br/>Sensitive Data Redactor"]
         B6 -.->|Clean Gemini Spans| T2["🛰️ Arize Cloud<br>(arize-otel Exporter)"]
     end
 

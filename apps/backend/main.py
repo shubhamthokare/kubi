@@ -13,6 +13,7 @@ from fastapi import FastAPI
 import asyncio
 from contextlib import asynccontextmanager
 from app.api.routes import router
+from app.api.auth_routes import router as auth_router
 from app.db.database import connect_to_mongo, close_mongo_connection
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
@@ -117,6 +118,7 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
 
 @app.get("/")
 async def root():

@@ -62,6 +62,22 @@ test:frontend:
       - apps/frontend/**/*
       - .gitlab-ci.yml
 
+sonarcloud:
+  stage: test
+  image: sonarsource/sonar-scanner-cli:latest
+  needs:
+    - test:backend
+    - test:frontend
+    - test:agent
+  script:
+    - sonar-scanner \
+        -Dsonar.projectKey=shubhamthokare_kubi \
+        -Dsonar.organization=shubhamthokare \
+        -Dsonar.host.url=$SONAR_HOST_URL \
+        -Dsonar.login=$SONAR_TOKEN \
+        -Dsonar.sources=apps/backend,apps/frontend,apps/agent \
+        -Dsonar.language=python,js,go \
+        -Dsonar.exclusions=**/node_modules/**,**/.git/**,**/tests/**
 # ──────────────────────────────────────────────────────────────────────────────
 # 📦 Stage: Build (Docker Containerization)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -116,8 +132,8 @@ update:manifests:
   stage: gitops
   image: line/kubectl-kustomize:latest
   script:
-    - git config --global user.email "gitops-bot@kubi.ai"
-    - git config --global user.name "Kubi GitOps Bot"
+    - git config --global user.email "${GITOPS_EMAIL:-$GITLAB_USER_EMAIL}"
+    - git config --global user.name "${GITOPS_NAME:-$GITLAB_USER_NAME}"
     # Ensure remote changes are integrated first
     - git checkout main
     - git pull origin main

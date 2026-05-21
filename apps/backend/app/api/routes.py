@@ -3,6 +3,7 @@ from fastapi import APIRouter, BackgroundTasks, Query, Header, Depends
 from app.workflows.incident_detection import IncidentDetectionWorkflow
 from app.workflows.remediation_workflow import RemediationWorkflow
 from app.services.kubernetes_service import KubernetesService
+from app.core.security import get_current_user_with_scope, rate_limit
 
 from app.api.schemas import (
     StatusResponse, HealthResponse, IncidentListResponse,
@@ -12,7 +13,7 @@ from app.api.schemas import (
     SettingsUpdateRequest, ReportListResponse, ValidateGeminiRequest,
     ValidateGitlabRequest, ValidateClusterRequest, ESValidateRequest,
     ValidationDetailResponse, SearchResponse, ESHealthResponse,
-    ManualActionRequest
+    ManualActionRequest, ManualRemediationRequest, ManualRemediationResponse
 )
 
 router = APIRouter()
@@ -49,7 +50,7 @@ async def get_k8s_service(x_cluster_id: Optional[str] = Header(None)) -> Kuberne
     # Default fallback
     return KubernetesService()
 
-@router.post("/scan", response_model=ScanResponse)
+@router.post("/scan", response_model=ScanResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
 async def trigger_scan(namespaces: Optional[List[str]] = Query(None), x_cluster_id: Optional[str] = Header(None)):
     """
     Trigger a manual scan of the Kubernetes cluster for incidents.
@@ -86,7 +87,7 @@ async def trigger_scan(namespaces: Optional[List[str]] = Query(None), x_cluster_
     result = await workflow.run_scan(namespaces, cluster_id=target_cluster_id)
     return result
 
-@router.post("/plans/{plan_id}/approve", response_model=PlanExecutionResponse)
+@router.post("/plans/{plan_id}/approve", response_model=PlanExecutionResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
 async def approve_plan(plan_id: str):
     """
     Approves a pending remediation plan and executes it.
@@ -94,7 +95,7 @@ async def approve_plan(plan_id: str):
     result = await remediation_workflow.approve_and_execute(plan_id)
     return result
 
-@router.post("/plans/{plan_id}/reject", response_model=StatusResponse)
+@router.post("/plans/{plan_id}/reject", response_model=StatusResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
 async def reject_plan(plan_id: str):
     """
     Rejects a pending remediation plan.
@@ -102,11 +103,11 @@ async def reject_plan(plan_id: str):
     result = await remediation_workflow.reject_plan(plan_id)
     return result
 
-@router.get("/health", response_model=HealthResponse)
+@router.get("/health", response_model=HealthResponse, dependencies=[Depends(rate_limit(60))])
 def health_check():
     return {"status": "healthy"}
 
-@router.get("/plans", response_model=PlanListResponse)
+@router.get("/plans", response_model=PlanListResponse, dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))])
 async def get_plans():
     """
     List all pending and completed remediation plans.
@@ -114,7 +115,7 @@ async def get_plans():
     plans = await remediation_workflow.get_all_plans()
     return {"plans": plans}
 
-@router.get("/plans/{plan_id}", response_model=PlanResponse)
+@router.get("/plans/{plan_id}", response_model=PlanResponse, dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))])
 async def get_plan(plan_id: str):
     """
     Get a specific remediation plan.
@@ -125,7 +126,7 @@ async def get_plan(plan_id: str):
         raise HTTPException(status_code=404, detail="Plan not found")
     return plan
 
-@router.get("/incidents", response_model=IncidentListResponse)
+@router.get("/incidents", response_model=IncidentListResponse, dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))])
 async def get_incidents(x_cluster_id: Optional[str] = Header(None)):
     """
     List all detected incidents.
@@ -158,7 +159,7 @@ async def get_incidents(x_cluster_id: Optional[str] = Header(None)):
         i["_id"] = str(i["_id"])
     return {"incidents": incidents}
 
-@router.get("/stats", response_model=ClusterStatsResponse)
+@router.get("/stats", response_model=ClusterStatsResponse, dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))])
 async def get_stats(x_cluster_id: Optional[str] = Header(None), ks: KubernetesService = Depends(get_k8s_service)):
     """
     Get real-time cluster statistics including average resolution time.
@@ -203,14 +204,14 @@ async def get_stats(x_cluster_id: Optional[str] = Header(None), ks: KubernetesSe
     stats["avg_resolution_time"] = avg_res_time
     return stats
 
-@router.get("/resources", response_model=ClusterResourcesResponse)
+@router.get("/resources", response_model=ClusterResourcesResponse, dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))])
 async def get_resources(ks: KubernetesService = Depends(get_k8s_service)):
     """
     Get all cluster resources (namespaces, deployments, pods) for filtering.
     """
     return ks.get_all_resources()
 
-@router.get("/incidents/{incident_id}/report", response_model=IncidentReportResponse)
+@router.get("/incidents/{incident_id}/report", response_model=IncidentReportResponse, dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))])
 async def get_incident_report(incident_id: str):
     """
     Generate and retrieve a professional postmortem report for an incident.
@@ -243,7 +244,7 @@ async def get_incident_report(incident_id: str):
     
     return {"report_md": report_md}
 
-@router.get("/settings", response_model=SettingsResponse)
+@router.get("/settings", response_model=SettingsResponse, dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))])
 async def get_settings():
     """
     Get system settings.
@@ -298,7 +299,7 @@ async def get_settings():
         
     return settings_doc
 
-@router.post("/settings", response_model=StatusResponse)
+@router.post("/settings", response_model=StatusResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
 async def update_settings(new_settings: SettingsUpdateRequest):
     """
     Update system settings.
@@ -349,7 +350,7 @@ async def update_settings(new_settings: SettingsUpdateRequest):
 
     return {"status": "success", "message": "Settings updated successfully"}
 
-@router.get("/reports", response_model=ReportListResponse)
+@router.get("/reports", response_model=ReportListResponse, dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))])
 async def list_reports():
     """
     List all generated postmortem reports.
@@ -362,7 +363,7 @@ async def list_reports():
     return {"reports": reports}
 
 
-@router.post("/gemini/validate", response_model=ValidationDetailResponse)
+@router.post("/gemini/validate", response_model=ValidationDetailResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
 async def validate_gemini(data: Optional[ValidateGeminiRequest] = None):
     """
     Test the Gemini API connection with the provided or current configuration.
@@ -374,7 +375,7 @@ async def validate_gemini(data: Optional[ValidateGeminiRequest] = None):
     result = await gemini.validate_connection(req_data)
     return result
 
-@router.post("/gitlab/validate", response_model=ValidationDetailResponse)
+@router.post("/gitlab/validate", response_model=ValidationDetailResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
 async def validate_gitlab(data: Optional[ValidateGitlabRequest] = None):
     """
     Test the GitLab API connection with the provided or current configuration.
@@ -385,8 +386,8 @@ async def validate_gitlab(data: Optional[ValidateGitlabRequest] = None):
     result = await gitlab_service.validate_connection(req_data)
     return result
 
-@router.post("/incidents/ingest", response_model=IncidentIngestResponse)
-@router.post("/v1/incidents/ingest", response_model=IncidentIngestResponse)
+@router.post("/incidents/ingest", response_model=IncidentIngestResponse, dependencies=[Depends(rate_limit(60))])
+@router.post("/v1/incidents/ingest", response_model=IncidentIngestResponse, dependencies=[Depends(rate_limit(60))])
 async def ingest_incident(incident_data: IncidentIngestRequest):
     """
     Ingest an incident reported by an external Kubi Agent.
@@ -432,7 +433,7 @@ async def ingest_incident(incident_data: IncidentIngestRequest):
     # but since the cluster is remote, we just store it for the dashboard to manage.
     return {"status": "success", "id": str(result.inserted_id)}
 
-@router.post("/clusters/validate", response_model=StatusResponse)
+@router.post("/clusters/validate", response_model=StatusResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
 async def validate_cluster(data: ValidateClusterRequest):
     """
     Test the Kubernetes connection for a specific agent URL or direct credentials.
@@ -471,7 +472,7 @@ async def validate_cluster(data: ValidateClusterRequest):
         return {"status": "error", "message": f"Failed to connect to agent: {str(e)}"}
     return {"status": "error", "message": "Agent returned unhealthy status."}
 
-@router.post("/actions/manual", response_model=StatusResponse)
+@router.post("/actions/manual", response_model=StatusResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
 async def execute_manual_action(request: ManualActionRequest, x_cluster_id: Optional[str] = Header(None)):
     """
     Executes a manual action (restart_pod, restart_deployment, rollback_deployment) on a cluster.
@@ -510,13 +511,26 @@ async def execute_manual_action(request: ManualActionRequest, x_cluster_id: Opti
     else:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=message)
-
+@router.post("/remediations/manual", response_model=PlanResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
+async def create_manual_remediation(request: ManualRemediationRequest, x_cluster_id: Optional[str] = Header(None)):
+    """
+    Create a manual remediation plan.
+    """
+    from app.services.gemini_service import RemediationPlan
+    plan = RemediationPlan(actions=request.actions, summary=request.summary or "Manual remediation plan")
+    plan_id = await remediation_workflow.store_plan(plan)
+    return {
+        "plan_id": plan_id,
+        "status": "pending_manual",
+        "plan": plan.model_dump(),
+        "generated_by": "manual",
+    }
 
 # ─────────────────────────────────────────────────────────────
 # Elasticsearch Routes
 # ─────────────────────────────────────────────────────────────
 
-@router.get("/es/health", response_model=ESHealthResponse)
+@router.get("/es/health", response_model=ESHealthResponse, dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))])
 async def elasticsearch_health():
     """
     Returns Elasticsearch cluster health, index list, and document counts.
@@ -526,7 +540,7 @@ async def elasticsearch_health():
     return get_es_health()
 
 
-@router.post("/es/validate", response_model=ValidationDetailResponse)
+@router.post("/es/validate", response_model=ValidationDetailResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
 async def elasticsearch_validate(data: Optional[ESValidateRequest] = None):
     """
     Test the Elasticsearch connection.
@@ -556,7 +570,7 @@ async def elasticsearch_validate(data: Optional[ESValidateRequest] = None):
     return {"status": "error", "message": f"Elasticsearch unreachable at {health.get('host')}", "detail": health}
 
 
-@router.get("/search", response_model=SearchResponse)
+@router.get("/search", response_model=SearchResponse, dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))])
 async def search_incidents_fulltext(
     q: str,
     index: Optional[str] = None,

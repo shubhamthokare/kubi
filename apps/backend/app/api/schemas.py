@@ -83,6 +83,14 @@ class ManualActionRequest(BaseModel):
     namespace: str
     cluster_id: Optional[str] = None
     reason: Optional[str] = "Manual user intervention"
+class ManualRemediationResponse(BaseModel):
+    plan_id: str
+    status: str
+
+class ManualRemediationRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    actions: List[ManualActionRequest]
+    summary: Optional[str] = None
 
 # -------------------------------------------------------------
 # Stats and Resources Models
