@@ -38,16 +38,29 @@ const incidentTrendData = [
   { month: 'Apr', critical: 1, high: 4, medium: 8, low: 4 },
   { month: 'May', critical: 0, high: 2, medium: 6, low: 3 },
 ];
+interface SystemStats {
+  nodes: { total: number; ready: number };
+  pods: { total: number; running: number; failed: number };
+  namespaces: number;
+  uptime: string;
+}
+
+interface ChartDataPoint {
+  time: string;
+  cpu: number;
+  memory: number;
+  network: number;
+}
 
 export default function AnalyzerPage() {
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
+  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [stats, setStats] = useState<SystemStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('live');
 
   useEffect(() => {
     // Initialize with some seed data
-    const initialData = [];
+    const initialData: ChartDataPoint[] = [];
     const now = new Date();
     for (let i = 10; i >= 0; i--) {
       const time = new Date(now.getTime() - i * 30000);
