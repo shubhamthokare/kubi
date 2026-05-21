@@ -35,7 +35,7 @@ class GeminiService:
             if db_settings:
                 api_key = db_settings.get("gemini_api_key", "")
         except Exception as e:
-            logger.error(f"Error loading dynamic Gemini configuration: {e}")
+            logging.exception(f"Error loading dynamic Gemini configuration: {e}")
             
         if not api_key:
             api_key = settings.GEMINI_API_KEY
@@ -90,7 +90,7 @@ class GeminiService:
             )
             return response.text
         except Exception as e:
-            logger.error(f"Error generating postmortem: {e}")
+            logging.exception(f"Error generating postmortem: {e}")
             return self._simulated_postmortem(incident_data)
 
     async def _get_model(self) -> str:
@@ -143,7 +143,7 @@ class GeminiService:
             if "API_KEY_SERVICE_BLOCKED" in error_msg or "PERMISSION_DENIED" in error_msg:
                 logger.warning("Gemini API Key is blocked or permission denied. Falling back to simulated SRE RCA engine.")
                 return self._simulated_rca(pod_name, pod_status, logs)
-            logger.error(f"Error calling Gemini API: {e}")
+            logging.exception(f"Error calling Gemini API: {e}")
             return self._simulated_rca(pod_name, pod_status, logs)
 
     async def validate_connection(self, data: dict = None) -> dict:
@@ -206,7 +206,7 @@ class GeminiService:
                         context += f"  Resolved At: {inc.get('resolved_at') or inc.get('updated_at', 'N/A')}\n\n"
                     return context
         except Exception as e:
-            logger.error(f"Elasticsearch search failed in get_historical_context: {e}")
+            logging.exception(f"Elasticsearch search failed in get_historical_context: {e}")
 
         # Fallback to MongoDB regex keyword search
         import re
@@ -232,7 +232,7 @@ class GeminiService:
                 context += f"  Resolved At: {inc.get('resolved_at')}\n\n"
             return context
         except Exception as e:
-            logger.error(f"Error retrieving historical context from MongoDB fallback: {e}")
+            logging.exception(f"Error retrieving historical context from MongoDB fallback: {e}")
             return "Error retrieving historical context."
 
     async def generate_remediation_plan(self, pod_name: str, rca_text: str, logs: str) -> RemediationPlan | None:
@@ -279,7 +279,7 @@ class GeminiService:
             if "API_KEY_SERVICE_BLOCKED" in error_msg or "PERMISSION_DENIED" in error_msg:
                 logger.warning("Gemini API Key is blocked or permission denied. Falling back to simulated SRE Remediation Planner.")
                 return self._simulated_remediation_plan(pod_name, rca_text, logs)
-            logger.error(f"Error generating remediation plan: {e}")
+            logging.exception(f"Error generating remediation plan: {e}")
             return self._simulated_remediation_plan(pod_name, rca_text, logs)
 
     def _simulated_rca(self, pod_name: str, pod_status: str, logs: str) -> str:

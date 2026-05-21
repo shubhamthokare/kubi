@@ -17,3 +17,8 @@ opentelemetry-instrumentation-httpx>=0.45b0
 # Elasticsearch for incident indexing and search
 elasticsearch==8.13.2
 
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+
+

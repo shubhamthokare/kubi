@@ -6,7 +6,7 @@ Creates indices with appropriate mappings on initialization.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
 from app.core.config import settings
@@ -164,15 +164,18 @@ def store_incident(incident_data: Dict[str, Any]) -> Optional[str]:
     }
     
     # Handle timestamps robustly
-    created_at = incident_data.get("created_at") or incident_data.get("first_detected") or datetime.utcnow()
+    created_at = incident_data.get("created_at") or incident_data.get("first_detected") or datetime.now(timezone.utc)
     if isinstance(created_at, str):
         try:
             created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
         except Exception:
-            created_at = datetime.utcnow()
+            created_at = datetime.now(timezone.utc)
+            
+    if isinstance(created_at, datetime) and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
             
     document["created_at"] = created_at
-    document["updated_at"] = datetime.utcnow()
+    document["updated_at"] = datetime.now(timezone.utc)
 
     return index_document(settings.ELASTICSEARCH_INDEX, document, doc_id=doc_id)
 
@@ -184,17 +187,35 @@ def store_pod_logs(pod_name: str, namespace: str, container: str, logs: str) -> 
         "namespace": namespace,
         "container": container,
         "log_content": logs,
-        "timestamp": datetime.utcnow(),
+        "timestamp": datetime.now(timezone.utc),
     }
     return index_document(settings.ELASTICSEARCH_INDEX_LOGS, document)
 
 
 def store_events(event_data: Dict[str, Any]) -> Optional[str]:
     """Store K8s events in Elasticsearch."""
+    first_occ = event_data.get("first_occurrence") or datetime.now(timezone.utc)
+    if isinstance(first_occ, str):
+        try:
+            first_occ = datetime.fromisoformat(first_occ.replace("Z", "+00:00"))
+        except Exception:
+            first_occ = datetime.now(timezone.utc)
+    if isinstance(first_occ, datetime) and first_occ.tzinfo is None:
+        first_occ = first_occ.replace(tzinfo=timezone.utc)
+
+    last_occ = event_data.get("last_occurrence") or datetime.now(timezone.utc)
+    if isinstance(last_occ, str):
+        try:
+            last_occ = datetime.fromisoformat(last_occ.replace("Z", "+00:00"))
+        except Exception:
+            last_occ = datetime.now(timezone.utc)
+    if isinstance(last_occ, datetime) and last_occ.tzinfo is None:
+        last_occ = last_occ.replace(tzinfo=timezone.utc)
+
     document = {
         **event_data,
-        "first_occurrence": event_data.get("first_occurrence", datetime.utcnow()),
-        "last_occurrence": event_data.get("last_occurrence", datetime.utcnow()),
+        "first_occurrence": first_occ,
+        "last_occurrence": last_occ,
     }
     
     doc_id = event_data.get("event_id")
@@ -210,7 +231,7 @@ def store_rca(incident_id: str, analysis: str, root_causes: str,
         "root_causes": root_causes,
         "affected_resources": affected_resources,
         "confidence_score": confidence_score,
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
     }
     return index_document(settings.ELASTICSEARCH_INDEX_RCA, document, doc_id=f"rca-{incident_id}")
 
@@ -225,6 +246,6 @@ def store_remediation(incident_id: str, action_type: str, target_resource: str,
         "namespace": namespace,
         "status": status,
         "details": details,
-        "executed_at": datetime.utcnow(),
+        "executed_at": datetime.now(timezone.utc),
     }
     return index_document(settings.ELASTICSEARCH_INDEX_REMEDIATION, document)

@@ -141,16 +141,16 @@ def get_es() -> Optional[Elasticsearch]:
             initialize_indices()  # Auto-create indices on first connection
             return _es_client
         else:
-            logger.error(f"✗ Elasticsearch at {host} is not responding")
+            logging.exception(f"✗ Elasticsearch at {host} is not responding")
             _es_client = None
             return None
 
     except ESConnectionError as e:
-        logger.error(f"✗ Failed to connect to Elasticsearch: {e}")
+        logging.exception(f"✗ Failed to connect to Elasticsearch: {e}")
         _es_client = None
         return None
     except Exception as e:
-        logger.error(f"✗ Unexpected error initializing Elasticsearch: {e}")
+        logging.exception(f"✗ Unexpected error initializing Elasticsearch: {e}")
         _es_client = None
         return None
 
@@ -205,7 +205,7 @@ def index_exists(index_name: str) -> bool:
     try:
         return bool(es.indices.exists(index=index_name))
     except Exception as e:
-        logger.error(f"Error checking if index {index_name} exists: {e}")
+        logging.exception(f"Error checking if index {index_name} exists: {e}")
         return False
 
 
@@ -244,7 +244,7 @@ def create_index(index_name: str, mapping: Optional[Dict[str, Any]] = None) -> b
         logger.info(f"✓ Created index: {index_name}")
         return True
     except Exception as e:
-        logger.error(f"Error creating index {index_name}: {e}")
+        logging.exception(f"Error creating index {index_name}: {e}")
         return False
 
 
@@ -293,7 +293,7 @@ def index_document(
         )
         return result.get("_id")
     except Exception as e:
-        logger.error(f"Error indexing document in {index_name}: {e}")
+        logging.exception(f"Error indexing document in {index_name}: {e}")
         return None
 
 
@@ -334,7 +334,7 @@ def bulk_index_documents(
 
         return success, failed
     except Exception as e:
-        logger.error(f"Error bulk indexing to {index_name}: {e}")
+        logging.exception(f"Error bulk indexing to {index_name}: {e}")
         return 0, len(documents)
 
 
@@ -380,7 +380,7 @@ def search_documents(
 
         return results, total
     except Exception as e:
-        logger.error(f"Error searching {index_name}: {e}")
+        logging.exception(f"Error searching {index_name}: {e}")
         return [], 0
 
 
@@ -487,7 +487,7 @@ def get_incident_stats(cluster_id: Optional[str] = None) -> Dict[str, Any]:
 
         return response.get("aggregations", {})
     except Exception as e:
-        logger.error(f"Error getting incident stats: {e}")
+        logging.exception(f"Error getting incident stats: {e}")
         return {}
 
 
@@ -536,7 +536,7 @@ def get_es_health() -> Dict[str, Any]:
             "indices": indices_info,
         }
     except Exception as e:
-        logger.error(f"ES health check failed: {e}")
+        logging.exception(f"ES health check failed: {e}")
         return {
             "status": "error",
             "error": str(e),
@@ -552,6 +552,6 @@ def close_es():
             _es_client.close()
             logger.info("Elasticsearch connection closed")
         except Exception as e:
-            logger.error(f"Error closing Elasticsearch: {e}")
+            logging.exception(f"Error closing Elasticsearch: {e}")
         finally:
             _es_client = None

@@ -40,7 +40,7 @@ class ActionEngine:
                 return False, f"Unknown action type: {action.action_type}"
                 
         except Exception as e:
-            logger.error(f"Error executing action {action.action_type}: {e}")
+            logging.exception(f"Error executing action {action.action_type}: {e}")
             return False, f"Execution failed: {str(e)}"
 
     async def execute_plan(self, actions: list[RemediationAction]) -> list[dict]:

@@ -132,7 +132,7 @@ async def callback(code: str, state: str):
             "mode": "production"
         }
     except Exception as e:
-        logger.error(f"Error during SSO auth code exchange: {e}")
+        logging.exception(f"Error during SSO auth code exchange: {e}")
         raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
 
 @router.get("/dev-token")

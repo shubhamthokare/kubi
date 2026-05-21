@@ -19,6 +19,12 @@ from app.api.schemas import (
 router = APIRouter()
 remediation_workflow = RemediationWorkflow()
 
+def _find_cluster(clusters: list, target_id: str) -> Optional[dict]:
+    for cluster in clusters:
+        if cluster.get("id") == target_id:
+            return cluster
+    return None
+
 async def get_k8s_service(x_cluster_id: Optional[str] = Header(None)) -> KubernetesService:
     from app.db.database import get_db
     try:
@@ -27,28 +33,27 @@ async def get_k8s_service(x_cluster_id: Optional[str] = Header(None)) -> Kuberne
     except Exception:
         settings = None
         
-    if settings:
-        clusters = settings.get("clusters", [])
-        if not clusters:
-            return KubernetesService(cluster_config={"auth_type": "disabled"})
+    if not settings:
+        return KubernetesService()
+        
+    clusters = settings.get("clusters", [])
+    if not clusters:
+        return KubernetesService(cluster_config={"auth_type": "disabled"})
+        
+    # Try finding by header cluster id
+    if x_cluster_id:
+        cluster = _find_cluster(clusters, x_cluster_id)
+        if cluster:
+            return KubernetesService(cluster_config=cluster)
             
-        if x_cluster_id:
-            for cluster in clusters:
-                if cluster.get("id") == x_cluster_id:
-                    return KubernetesService(cluster_config=cluster)
-            # If x_cluster_id is stale, fall through to active_cluster_id or first available cluster
+    # Try finding by active_cluster_id
+    active_id = settings.get("active_cluster_id")
+    if active_id:
+        cluster = _find_cluster(clusters, active_id)
+        if cluster:
+            return KubernetesService(cluster_config=cluster)
             
-        active_id = settings.get("active_cluster_id")
-        if active_id:
-            for cluster in clusters:
-                if cluster.get("id") == active_id:
-                    return KubernetesService(cluster_config=cluster)
-            
-        if clusters:
-            return KubernetesService(cluster_config=clusters[0])
-            
-    # Default fallback
-    return KubernetesService()
+    return KubernetesService(cluster_config=clusters[0])
 
 @router.post("/scan", response_model=ScanResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
 async def trigger_scan(namespaces: Optional[List[str]] = Query(None), x_cluster_id: Optional[str] = Header(None)):
@@ -115,7 +120,12 @@ async def get_plans():
     plans = await remediation_workflow.get_all_plans()
     return {"plans": plans}
 
-@router.get("/plans/{plan_id}", response_model=PlanResponse, dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))])
+@router.get(
+    "/plans/{plan_id}",
+    response_model=PlanResponse,
+    dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))],
+    responses={404: {"description": "Remediation plan not found"}}
+)
 async def get_plan(plan_id: str):
     """
     Get a specific remediation plan.
@@ -211,7 +221,12 @@ async def get_resources(ks: KubernetesService = Depends(get_k8s_service)):
     """
     return ks.get_all_resources()
 
-@router.get("/incidents/{incident_id}/report", response_model=IncidentReportResponse, dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))])
+@router.get(
+    "/incidents/{incident_id}/report",
+    response_model=IncidentReportResponse,
+    dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))],
+    responses={404: {"description": "Incident not found"}}
+)
 async def get_incident_report(incident_id: str):
     """
     Generate and retrieve a professional postmortem report for an incident.
@@ -305,7 +320,7 @@ async def update_settings(new_settings: SettingsUpdateRequest):
     Update system settings.
     """
     from app.db.database import get_db
-    from datetime import datetime
+    from datetime import datetime, timezone
     db = get_db()
     
     # Preserve actual credentials if masked bullets are passed back from frontend
@@ -329,7 +344,7 @@ async def update_settings(new_settings: SettingsUpdateRequest):
         new_settings_dict["active_cluster_id"] = clusters[0].get("id")
                 
     new_settings_dict["id"] = "system_config"
-    new_settings_dict["updated_at"] = datetime.utcnow().isoformat() + "Z"
+    new_settings_dict["updated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     new_settings_dict.pop("_id", None)
     
     await db.settings.update_one(
@@ -393,7 +408,7 @@ async def ingest_incident(incident_data: IncidentIngestRequest):
     Ingest an incident reported by an external Kubi Agent.
     """
     from app.db.database import get_db
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     db = get_db()
     
@@ -411,7 +426,7 @@ async def ingest_incident(incident_data: IncidentIngestRequest):
     if existing:
         return {"status": "ignored", "message": "Incident already exists"}
         
-    incident_dict["created_at"] = datetime.utcnow().isoformat() + "Z"
+    incident_dict["created_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     
     # Generate an incident plan asynchronously or save it
     # Currently we just insert to DB. The dashboard or background task will pick it up
@@ -427,7 +442,8 @@ async def ingest_incident(incident_data: IncidentIngestRequest):
     except Exception as e:
         # Log but do not fail ingestion
         import logging
-        logging.getLogger(__name__).warning(f"Failed to index incident in Elasticsearch: {e}")
+        from app.core.logging_sanitizer import sanitize_log
+        logging.getLogger(__name__).warning(f"Failed to index incident in Elasticsearch: {sanitize_log(e)}")
     
     # If auto-remediation is enabled, we could potentially trigger RemediationWorkflow here,
     # but since the cluster is remote, we just store it for the dashboard to manage.
@@ -472,7 +488,12 @@ async def validate_cluster(data: ValidateClusterRequest):
         return {"status": "error", "message": f"Failed to connect to agent: {str(e)}"}
     return {"status": "error", "message": "Agent returned unhealthy status."}
 
-@router.post("/actions/manual", response_model=StatusResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
+@router.post(
+    "/actions/manual",
+    response_model=StatusResponse,
+    dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))],
+    responses={400: {"description": "Failed to execute manual action on Kubernetes agent"}}
+)
 async def execute_manual_action(request: ManualActionRequest, x_cluster_id: Optional[str] = Header(None)):
     """
     Executes a manual action (restart_pod, restart_deployment, rollback_deployment) on a cluster.

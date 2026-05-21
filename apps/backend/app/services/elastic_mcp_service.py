@@ -36,7 +36,7 @@ class ElasticMCPService:
                         log_contents.append(f"[{timestamp}] {content}")
                     return "\n".join(log_contents)
         except Exception as e:
-            logger.error(f"Failed to fetch logs from local Elasticsearch: {e}")
+            logging.exception(f"Failed to fetch logs from local Elasticsearch: {e}")
 
         # 2. In a real MCP setup, we'd send a JSON-RPC request to the MCP server.
         try:

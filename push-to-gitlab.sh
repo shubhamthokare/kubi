@@ -34,7 +34,7 @@ echo -e "${BLUE}➕ Adding all changes...${NC}"
 git add .
 
 echo -e "${BLUE}💾 Committing changes...${NC}"
-git commit -m "feat: integrate SonarCloud, modernise GitLab CI rules, updated the GL_ACCESS_TOKEN var and update git config emails" || true
+git commit -m "refactor: resolve SonarQube quality smells, add log sanitization, migrate to timezone-aware datetimes, and fix pytest and node engine version in GitLab CI" || true
 echo ""
 
 echo -e "${BLUE}🔄 Pulling remote changes to reconcile histories...${NC}"

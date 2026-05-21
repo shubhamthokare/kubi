@@ -1,4 +1,5 @@
 import logging
+from app.core.logging_sanitizer import sanitize_log
 from app.services.kubernetes_service import KubernetesService
 from app.services.elastic_mcp_service import ElasticMCPService
 from app.services.gemini_service import GeminiService
@@ -27,7 +28,7 @@ class IncidentDetectionWorkflow:
         3. Sends data to Gemini for RCA and Remediation Plan.
         """
         target_info = f"namespaces: {namespaces}" if namespaces else "cluster-wide"
-        logger.info(f"Starting incident scan across {target_info}")
+        logger.info(f"Starting incident scan across {sanitize_log(target_info)}")
         
         failed_pods = self.k8s_service.get_failed_pods(namespaces)
         if not failed_pods:
@@ -47,7 +48,7 @@ class IncidentDetectionWorkflow:
             if db_settings:
                 gitlab_enabled = db_settings.get("gitlab_enabled", False)
         except Exception as e:
-            logger.error(f"Error fetching gitlab_enabled setting: {e}")
+            logging.exception(f"Error fetching gitlab_enabled setting: {e}")
 
         for pod in failed_pods:
             pod_name = pod["name"]
@@ -93,7 +94,7 @@ class IncidentDetectionWorkflow:
                         should_skip = False
                 
                 if should_skip:
-                    logger.info(f"An incident for {deployment_name} is already active. Skipping re-analysis.")
+                    logger.info(f"An incident for {sanitize_log(deployment_name)} is already active. Skipping re-analysis.")
                     obj_id = existing_incident["_id"]
                     existing_incident["_id"] = str(existing_incident["_id"])
                     # Update last_seen to keep it fresh
@@ -102,9 +103,9 @@ class IncidentDetectionWorkflow:
                     incidents.append(existing_incident)
                     continue
                 else:
-                    logger.info(f"An active incident for {deployment_name} has a failed/rejected plan. Re-running analysis.")
+                    logger.info(f"An active incident for {sanitize_log(deployment_name)} has a failed/rejected plan. Re-running analysis.")
                 
-            logger.info(f"Analyzing failed pod: {pod_ns}/{pod_name} (UID: {pod_uid})")
+            logger.info(f"Analyzing failed pod: {sanitize_log(pod_ns)}/{sanitize_log(pod_name)} (UID: {sanitize_log(pod_uid)})")
             
             # Extract service name to detect infinite loops
             if has_owner:
@@ -124,7 +125,7 @@ class IncidentDetectionWorkflow:
             
             loop_detected = recent_incident_count >= 3
             if loop_detected:
-                logger.warning(f"Infinite loop detected for service {service_name}. {recent_incident_count} incidents in last 15 mins.")
+                logger.warning(f"Infinite loop detected for service {sanitize_log(service_name)}. {recent_incident_count} incidents in last 15 mins.")
             
             # Fetch logs
             k8s_logs = self.k8s_service.get_pod_logs(pod_name, pod_ns)
@@ -156,7 +157,7 @@ class IncidentDetectionWorkflow:
                         for action in remediation_plan.actions
                     )
                     if has_gitlab_action:
-                        logger.info(f"Auto-triggering remediation plan {plan_id} in background since gitlab is enabled.")
+                        logger.info(f"Auto-triggering remediation plan {sanitize_log(plan_id)} in background since gitlab is enabled.")
                         asyncio.create_task(self.remediation_workflow.approve_and_execute(plan_id))
             
             # Create or update incident in MongoDB
@@ -201,7 +202,7 @@ class IncidentDetectionWorkflow:
                     # Store incident document
                     store_incident(incident_data)
                 except Exception as e:
-                    logger.error(f"Error indexing incident into Elasticsearch: {e}")
+                    logging.exception(f"Error indexing incident into Elasticsearch: {e}")
 
                 # Store RCA and remediation artifacts in ES if available
                 try:
@@ -214,7 +215,7 @@ class IncidentDetectionWorkflow:
                             confidence_score=1.0,
                         )
                 except Exception as e:
-                    logger.error(f"Error indexing RCA into Elasticsearch: {e}")
+                    logging.exception(f"Error indexing RCA into Elasticsearch: {e}")
 
                 try:
                     if plan_id:
@@ -228,7 +229,7 @@ class IncidentDetectionWorkflow:
                             details=str(remediation_plan.summary) if remediation_plan else "",
                         )
                 except Exception as e:
-                    logger.error(f"Error indexing remediation into Elasticsearch: {e}")
+                    logging.exception(f"Error indexing remediation into Elasticsearch: {e}")
             
         # 3. Resolution Tracking: Check if previously active incidents are now resolved
         try:
@@ -249,7 +250,7 @@ class IncidentDetectionWorkflow:
                     pod_name = doc["pod"]["name"]
                     pod_ns = doc["pod"]["namespace"]
                     if self.k8s_service.verify_pod_health(pod_name, pod_ns):
-                        logger.info(f"Incident for pod {pod_name} resolved. Updating status and generating postmortem.")
+                        logger.info(f"Incident for pod {sanitize_log(pod_name)} resolved. Updating status and generating postmortem.")
                         resolved_at = datetime.now(timezone.utc).isoformat()
                         
                         await db.incidents.update_one(
@@ -269,6 +270,6 @@ class IncidentDetectionWorkflow:
                         rs = ReportingService()
                         await rs.generate_postmortem(doc)
         except Exception as e:
-            logger.error(f"Error during resolution tracking: {e}")
+            logging.exception(f"Error during resolution tracking: {e}")
             
         return {"status": "issues_found", "incidents": incidents}

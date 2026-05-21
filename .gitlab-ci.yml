@@ -32,7 +32,7 @@ test:backend:
   script:
     - cd apps/backend
     - pip install -r requirements.txt
-    - pytest tests/ -v
+    - PYTHONPATH=. pytest tests/ -v
   only:
     changes:
       - apps/backend/**/*
@@ -44,7 +44,7 @@ test:agent:
   script:
     - cd apps/agent
     - pip install -r requirements.txt
-    - pytest tests/ -v || echo "Tests passed or skipped"
+    - if [ -d "tests" ]; then PYTHONPATH=. python -m unittest discover -s tests -v; else echo "No tests found for agent"; fi
   only:
     changes:
       - apps/agent/**/*
@@ -52,7 +52,7 @@ test:agent:
 
 test:frontend:
   stage: test
-  image: node:18-alpine
+  image: node:20-alpine
   script:
     - cd apps/frontend
     - npm install

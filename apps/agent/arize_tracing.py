@@ -105,7 +105,7 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
         return tracer_provider
         
     except Exception as e:
-        logger.error(f"Failed to initialize Arize tracing: {e}", exc_info=True)
+        logging.exception(f"Failed to initialize Arize tracing: {e}", exc_info=True)
         return None
 
 

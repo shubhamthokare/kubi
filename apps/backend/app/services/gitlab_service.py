@@ -29,7 +29,7 @@ class GitLabService:
                 if db_token:
                     token = db_token
         except Exception as e:
-            logger.error(f"Error loading dynamic GitLab configuration: {e}")
+            logging.exception(f"Error loading dynamic GitLab configuration: {e}")
         return api_url, token
 
     async def get_latest_pipeline_status(self, service_name: str) -> dict:
@@ -98,7 +98,7 @@ class GitLabService:
                     "author": detail.get("user", {}).get("name", "GitLab User")
                 }
         except Exception as e:
-            logger.error(f"GitLab API Error for {service_name}: {e}")
+            logging.exception(f"GitLab API Error for {service_name}: {e}")
             return {"status": "error", "message": str(e)}
 
     async def trigger_pipeline(self, target_name: str, action: str) -> tuple[bool, str]:
@@ -141,11 +141,11 @@ class GitLabService:
                     data = trigger_resp.json()
                     return True, f"Triggered GitLab pipeline {data.get('id')} for {target_name} (Action: {action})"
                 else:
-                    logger.error(f"GitLab Trigger Error: {trigger_resp.text}")
+                    logging.exception(f"GitLab Trigger Error: {trigger_resp.text}")
                     return False, f"GitLab API returned {trigger_resp.status_code}"
 
         except Exception as e:
-            logger.error(f"Failed to trigger GitLab pipeline for {target_name}: {e}")
+            logging.exception(f"Failed to trigger GitLab pipeline for {target_name}: {e}")
             return False, str(e)
 
     async def validate_connection(self, data: dict = None) -> dict:

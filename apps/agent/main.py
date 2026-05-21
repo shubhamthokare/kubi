@@ -93,7 +93,7 @@ def get_failed_pods(namespace: str):
                     "has_owner": bool(pod.metadata.owner_references)
                 })
     except ApiException as e:
-        logger.error(f"Error fetching pods: {e}")
+        logging.exception(f"Error fetching pods: {e}")
     return failed_pods
 
 def report_incident(pod_dict):
@@ -111,7 +111,7 @@ def report_incident(pod_dict):
         if response.status_code in [200, 201]:
             logger.info(f"Successfully reported incident for pod: {pod_dict['name']}")
     except Exception as e:
-        logger.error(f"Error contacting Kubi backend: {e}")
+        logging.exception(f"Error contacting Kubi backend: {e}")
 
 async def background_scanner():
     while True:
@@ -177,7 +177,7 @@ def get_stats():
             "uptime": uptime
         }
     except Exception as e:
-        logger.error(f"Stats error: {e}")
+        logging.exception(f"Stats error: {e}")
         return {"nodes": {"total": 0, "ready": 0}, "pods": {"total": 0, "running": 0, "failed": 0, "pending": 0}, "namespaces": 0, "uptime": "N/A"}
 
 @app.get("/resources")
@@ -194,7 +194,7 @@ def get_resources():
             "pods": pods_list
         }
     except Exception as e:
-        logger.error(f"Resources error: {e}")
+        logging.exception(f"Resources error: {e}")
         return {"namespaces": [], "deployments": [], "pods": []}
 
 @app.get("/logs/{namespace}/{pod}")
@@ -236,7 +236,7 @@ def get_logs(namespace: str, pod: str, tail_lines: int = 50):
             if diag_lines:
                 return {"logs": "Error: Pod is not in a running state to stream logs. Diagnostic Kubernetes Status Info:\n" + "\n".join(diag_lines)}
         except Exception as inner_e:
-            logger.error(f"Failed to fetch diagnostic info: {inner_e}")
+            logging.exception(f"Failed to fetch diagnostic info: {inner_e}")
         return {"logs": f"Error retrieving container logs: {str(e)}"}
 
 @app.get("/failed_pods")

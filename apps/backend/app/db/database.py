@@ -22,7 +22,7 @@ async def connect_to_mongo():
             logger.info("Successfully connected to MongoDB!")
             return
         except Exception as e:
-            logger.error(f"MongoDB connection attempt {attempt} failed: {e}")
+            logging.exception(f"MongoDB connection attempt {attempt} failed: {e}")
             if attempt < max_retries:
                 logger.info(f"Retrying in {retry_delay} seconds...")
                 await asyncio.sleep(retry_delay)

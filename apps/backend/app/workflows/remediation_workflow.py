@@ -2,6 +2,7 @@ import uuid
 import logging
 import asyncio
 from datetime import datetime, timezone
+from app.core.logging_sanitizer import sanitize_log
 from app.services.action_engine import ActionEngine
 from app.services.gemini_service import RemediationPlan
 from app.services.reporting_service import ReportingService
@@ -27,7 +28,7 @@ class RemediationWorkflow:
         }
         
         await db.plans.insert_one(plan_dict)
-        logger.info(f"Stored pending remediation plan {plan_id} in MongoDB")
+        logger.info(f"Stored pending remediation plan {sanitize_log(plan_id)} in MongoDB")
         return plan_id
 
     async def get_plan(self, plan_id: str) -> dict | None:
@@ -88,7 +89,7 @@ class RemediationWorkflow:
             return {"status": "failed_execution", "execution_results": results}
             
         # Phase 4: Health Verification Polling
-        logger.info(f"Waiting for health verification for plan {plan_id}...")
+        logger.info(f"Waiting for health verification for plan {sanitize_log(plan_id)}...")
         await db.plans.update_one({"plan_id": plan_id}, {"$set": {"status": "verifying"}})
         
         verified = True
@@ -102,7 +103,7 @@ class RemediationWorkflow:
                         is_healthy = True
                         break
                 if not is_healthy:
-                    logger.warning(f"Health verification failed for {action.target_name}")
+                    logger.warning(f"Health verification failed for {sanitize_log(action.target_name)}")
                     verified = False
             elif action.action_type == "restart_pod":
                 # Poll pod health
@@ -113,7 +114,7 @@ class RemediationWorkflow:
                         is_healthy = True
                         break
                 if not is_healthy:
-                    logger.warning(f"Health verification failed for pod {action.target_name}")
+                    logger.warning(f"Health verification failed for pod {sanitize_log(action.target_name)}")
                     verified = False
         
         final_status = "completed" if verified else "failed_verification"
@@ -126,7 +127,7 @@ class RemediationWorkflow:
                 {"plan_id": plan_id, "status": "active"},
                 {"$set": {"status": "resolved", "resolved_at": resolved_at}}
             )
-            logger.info(f"Incident associated with plan {plan_id} marked as resolved.")
+            logger.info(f"Incident associated with plan {sanitize_log(plan_id)} marked as resolved.")
 
             # Index remediation actions into Elasticsearch
             try:
@@ -148,18 +149,18 @@ class RemediationWorkflow:
 
             # Phase 5: Postmortem Generation
             try:
-                logger.info(f"Generating postmortem for successful remediation {plan_id}...")
+                logger.info(f"Generating postmortem for successful remediation {sanitize_log(plan_id)}...")
                 # Find the incident associated with this plan
                 incident = await db.incidents.find_one({"plan_id": plan_id})
                 if incident:
                     incident["status"] = "resolved"
                     incident["resolved_at"] = resolved_at
                     report = await self.reporting_service.generate_postmortem(incident, {"verified": True, "actions": results})
-                    logger.info(f"Postmortem generated and saved for plan {plan_id}")
+                    logger.info(f"Postmortem generated and saved for plan {sanitize_log(plan_id)}")
             except Exception as e:
-                logger.error(f"Failed to generate postmortem for {plan_id}: {e}")
+                logging.exception(f"Failed to generate postmortem for {sanitize_log(plan_id)}: {e}")
         else:
-            logger.error(f"Plan {plan_id} failed health verification.")
+            logging.exception(f"Plan {sanitize_log(plan_id)} failed health verification.")
             
         return {
             "status": final_status,

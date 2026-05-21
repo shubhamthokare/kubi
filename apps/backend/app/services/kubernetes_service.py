@@ -63,7 +63,7 @@ class KubernetesService:
                     # Dump back to yaml string
                     kubeconfig_str = yaml.dump(kube_dict)
             except Exception as ye:
-                logger.error(f"Failed to dynamically patch uploaded credentials in kubeconfig: {ye}")
+                logging.exception(f"Failed to dynamically patch uploaded credentials in kubeconfig: {ye}")
 
             if "token: dummy" in kubeconfig_str:
                 token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -73,7 +73,7 @@ class KubernetesService:
                             real_token = tf.read().strip()
                         kubeconfig_str = kubeconfig_str.replace("token: dummy", f"token: {real_token}")
                     except Exception as te:
-                        logger.error(f"Failed to read in-cluster service account token: {te}")
+                        logging.exception(f"Failed to read in-cluster service account token: {te}")
             temp_file = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".yaml")
             temp_file.write(kubeconfig_str)
             temp_file.close()
@@ -161,7 +161,7 @@ class KubernetesService:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            logger.error(f"Error fetching {endpoint} from agent: {e}")
+            logging.exception(f"Error fetching {endpoint} from agent: {e}")
             return None
 
     def _post(self, endpoint: str, json_data: dict = None):
@@ -170,7 +170,7 @@ class KubernetesService:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            logger.error(f"Error posting to {endpoint} on agent: {e}")
+            logging.exception(f"Error posting to {endpoint} on agent: {e}")
             return {"success": False, "message": str(e)}
 
     def get_failed_pods(self, namespaces: list[str] = None):
@@ -230,7 +230,7 @@ class KubernetesService:
                             "has_owner": bool(pod.metadata.owner_references)
                         })
             except Exception as e:
-                logger.error(f"Error fetching pods in direct mode: {e}")
+                logging.exception(f"Error fetching pods in direct mode: {e}")
             return failed_pods
 
         # Agent-based fallback
@@ -290,7 +290,7 @@ class KubernetesService:
                     if diag_lines:
                         return "Error: Pod is not in a running state to stream logs. Diagnostic Kubernetes Status Info:\n" + "\n".join(diag_lines)
                 except Exception as inner_e:
-                    logger.error(f"Failed to fetch direct diagnostic info: {inner_e}")
+                    logging.exception(f"Failed to fetch direct diagnostic info: {inner_e}")
                 return f"Error retrieving container logs directly: {str(e)}"
 
         # Agent-based fallback
@@ -345,7 +345,7 @@ class KubernetesService:
             result = response.json()
             return result.get("success", False), result.get("message", "Unknown response from agent")
         except Exception as e:
-            logger.error(f"Error deleting pod {name}: {e}")
+            logging.exception(f"Error deleting pod {name}: {e}")
             return False, f"Failed to connect to agent: {str(e)}"
 
     def verify_deployment_health(self, name: str, namespace: str = "default") -> bool:
@@ -420,7 +420,7 @@ class KubernetesService:
                     "uptime": uptime
                 }
             except Exception as e:
-                logger.error(f"Direct Stats error: {e}")
+                logging.exception(f"Direct Stats error: {e}")
                 return {"nodes": {"total": 0, "ready": 0}, "pods": {"total": 0, "running": 0, "failed": 0, "pending": 0}, "namespaces": 0, "uptime": "N/A"}
 
         # Agent-based fallback
@@ -452,7 +452,7 @@ class KubernetesService:
                     "pods": pods_list
                 }
             except Exception as e:
-                logger.error(f"Direct Resources error: {e}")
+                logging.exception(f"Direct Resources error: {e}")
                 return {"namespaces": [], "deployments": [], "pods": []}
 
         # Agent-based fallback
@@ -509,7 +509,7 @@ class KubernetesService:
                     })
                 return events_list
             except Exception as e:
-                logger.error(f"Direct Events error: {e}")
+                logging.exception(f"Direct Events error: {e}")
                 return []
         return []
 

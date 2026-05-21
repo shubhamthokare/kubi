@@ -1,7 +1,7 @@
 import logging
 from app.services.gemini_service import GeminiService
 from app.db.database import get_db
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +17,19 @@ class ReportingService:
         incident_id = incident_data.get("id")
         plan_id = incident_data.get("plan_id")
         
+        # Merge execution results to resolve python:S1172 and improve postmortem report context
+        data_copy = dict(incident_data)
+        if execution_results:
+            logger.info("Merging execution results into incident data for postmortem generation")
+            if "actions" in execution_results and "plan_actions" not in data_copy:
+                data_copy["plan_actions"] = execution_results["actions"]
+            if "status" in execution_results and "plan_status" not in data_copy:
+                data_copy["plan_status"] = execution_results["status"]
+            data_copy["execution_results"] = execution_results
+
         try:
             # Generate report content
-            postmortem = await self.gemini_service.generate_postmortem(incident_data)
+            postmortem = await self.gemini_service.generate_postmortem(data_copy)
             
             # Save to both incidents and reports collection
             await self.save_report(incident_id, plan_id, postmortem)
@@ -34,7 +44,7 @@ class ReportingService:
             
             return postmortem
         except Exception as e:
-            logger.error(f"Failed to generate postmortem: {e}")
+            logging.exception(f"Failed to generate postmortem: {e}")
             return f"# Postmortem Generation Error\nAn error occurred while generating the report for {pod_name}. Technical error: {str(e)}"
 
     async def save_report(self, incident_id: str, plan_id: str, report_content: str):
@@ -54,7 +64,7 @@ class ReportingService:
             "incident_id": incident_id,
             "plan_id": plan_id,
             "content": report_content,
-            "created_at": datetime.utcnow().isoformat() + "Z"
+            "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         }
         
         # Upsert into reports
