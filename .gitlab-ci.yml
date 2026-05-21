@@ -66,9 +66,12 @@ sonarcloud:
   stage: test
   image: sonarsource/sonar-scanner-cli:latest
   needs:
-    - test:backend
-    - test:frontend
-    - test:agent
+    - job: test:backend
+      optional: true
+    - job: test:frontend
+      optional: true
+    - job: test:agent
+      optional: true
   script:
     - sonar-scanner \
         -Dsonar.projectKey=shubhamthokare_kubi \
