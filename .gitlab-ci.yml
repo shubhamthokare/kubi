@@ -146,9 +146,5 @@ update:manifests:
     - git add kustomization.yaml
     - git commit -m "gitops:auto-promote image tags to commit $CI_COMMIT_SHORT_SHA [skip ci]" || echo "No image tag changes detected"
     - git push https://oauth2:${GL_ACCESS_TOKEN}@gitlab.com/kubi-agent/kubi.git HEAD:main
-  only:
-    refs:
-      - main
-  # Set GL_ACCESS_TOKEN as a Protected CI/CD Variable in GitLab Settings -> CI/CD -> Variables
   rules:
-    - if: '$GL_ACCESS_TOKEN'
+    - if: '$CI_COMMIT_BRANCH == "main" && $GL_ACCESS_TOKEN'
