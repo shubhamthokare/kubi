@@ -73,14 +73,7 @@ sonarcloud:
     - job: test:agent
       optional: true
   script:
-    - sonar-scanner \
-        -Dsonar.projectKey=shubhamthokare_kubi \
-        -Dsonar.organization=shubhamthokare \
-        -Dsonar.host.url=$SONAR_HOST_URL \
-        -Dsonar.login=$SONAR_TOKEN \
-        -Dsonar.sources=apps/backend,apps/frontend,apps/agent \
-        -Dsonar.language=python,js,go \
-        -Dsonar.exclusions=**/node_modules/**,**/.git/**,**/tests/**
+    - sonar-scanner -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.login=$SONAR_TOKEN
 # ──────────────────────────────────────────────────────────────────────────────
 # 📦 Stage: Build (Docker Containerization)
 # ──────────────────────────────────────────────────────────────────────────────
