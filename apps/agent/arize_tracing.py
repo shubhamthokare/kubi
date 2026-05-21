@@ -31,6 +31,58 @@ SENSITIVE_HEADERS = {
 }
 
 
+def _log_inactive_tracing(environment: str) -> None:
+    """Log warning or info when tracing is unconfigured."""
+    if environment == "production":
+        logger.warning(
+            "Arize tracing not initialized: ENVIRONMENT is production but neither "
+            "Arize Cloud credentials (ARIZE_SPACE_ID, ARIZE_API_KEY) nor "
+            "local collector endpoints (PHOENIX_COLLECTOR_ENDPOINT) are set."
+        )
+    else:
+        logger.info("Arize tracing is inactive (unconfigured).")
+
+
+def _get_local_transport(phoenix_endpoint: str) -> Optional[object]:
+    """Determine the appropriate Transport type based on phoenix endpoint ports."""
+    try:
+        from arize.otel import Transport
+        if any(p in phoenix_endpoint for p in ["6006", "4318", "v1/traces"]):
+            return Transport.HTTP
+        return Transport.GRPC
+    except Exception:
+        return None
+
+
+def _register_tracer(
+    is_cloud_ready: bool,
+    space_id: Optional[str],
+    api_key: Optional[str],
+    project_name: str,
+    phoenix_endpoint: Optional[str]
+) -> TracerProvider:
+    """Register either Arize Cloud or local OTel / Phoenix tracer provider."""
+    if is_cloud_ready:
+        logger.info(f"Initializing Arize Cloud tracing for Kubi Agent (Project: {project_name})...")
+        return register(
+            space_id=space_id,
+            api_key=api_key,
+            project_name=project_name,
+        )
+    
+    logger.info(f"Initializing local Arize Phoenix/OTLP tracing to '{phoenix_endpoint}'...")
+    register_kwargs = {
+        "project_name": project_name,
+        "endpoint": phoenix_endpoint,
+    }
+    
+    transport_val = _get_local_transport(phoenix_endpoint)
+    if transport_val is not None:
+        register_kwargs["transport"] = transport_val
+        
+    return register(**register_kwargs)
+
+
 def initialize_arize_tracing() -> Optional[TracerProvider]:
     """
     Initialize Arize AX or Phoenix tracing for the Kubi Agent.
@@ -53,42 +105,17 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
     is_local_ready = bool(phoenix_endpoint)
     
     if not (is_cloud_ready or is_local_ready):
-        if environment == "production":
-            logger.warning(
-                "Arize tracing not initialized: ENVIRONMENT is production but neither "
-                "Arize Cloud credentials (ARIZE_SPACE_ID, ARIZE_API_KEY) nor "
-                "local collector endpoints (PHOENIX_COLLECTOR_ENDPOINT) are set."
-            )
-        else:
-            logger.info("Arize tracing is inactive (unconfigured).")
+        _log_inactive_tracing(environment)
         return None
     
     try:
-        if is_cloud_ready:
-            logger.info(f"Initializing Arize Cloud tracing for Kubi Agent (Project: {project_name})...")
-            tracer_provider = register(
-                space_id=space_id,
-                api_key=api_key,
-                project_name=project_name,
-            )
-        else:
-            logger.info(f"Initializing local Arize Phoenix/OTLP tracing to '{phoenix_endpoint}'...")
-            
-            # Determine appropriate transport (HTTP for standard port 6006 or 4318, otherwise gRPC)
-            try:
-                from arize.otel import Transport
-                transport_val = Transport.HTTP if any(p in phoenix_endpoint for p in ["6006", "4318", "v1/traces"]) else Transport.GRPC
-            except Exception:
-                transport_val = None
-                
-            register_kwargs = {
-                "project_name": project_name,
-                "endpoint": phoenix_endpoint,
-            }
-            if transport_val is not None:
-                register_kwargs["transport"] = transport_val
-                
-            tracer_provider = register(**register_kwargs)
+        tracer_provider = _register_tracer(
+            is_cloud_ready=is_cloud_ready,
+            space_id=space_id,
+            api_key=api_key,
+            project_name=project_name,
+            phoenix_endpoint=phoenix_endpoint
+        )
         
         # Instrument FastAPI (agent runs on FastAPI)
         FastAPIInstrumentor().instrument()
