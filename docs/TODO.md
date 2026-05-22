@@ -16,6 +16,7 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 - **[x] Elasticsearch Semantic RAG Setup**: Configured Elasticsearch 8.13.4 index mapping, RAG search, and context integration to provide Gemini historical incident context.
 - **[x] Monorepo Restructuring**: Cleanly reorganized modules into `apps/backend/`, `apps/agent/`, and `apps/frontend/`.
 - **[x] Multi-Platform Docker Orchestration**: Created `deploy-docker.ps1` and `deploy-docker.sh` wrapper utilities to launch the whole cluster stack with a single click.
+- **[x] Container Build & CI/CD Pipeline Security Hardening**: Secured container builds and runner workflows monorepo-wide using `--only-binary :all:` rules to block compromised dependency execution; established `--default-timeout=100` resilience against transient PyPI metadata server connection drops.
 
 ---
 
@@ -56,6 +57,6 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 - [ ] **Safe-mode Rollback guards**: Monitor workloads for 5 minutes post-remediation and auto-rollback if health checks degrade.
 
 ---
-*Last Updated: May 21, 2026*  
+*Last Updated: May 22, 2026*  
 *Project Stage: Phase 1 (Active)*
 
