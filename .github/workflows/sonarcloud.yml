@@ -22,7 +22,7 @@ jobs:
       - name: Install backend dependencies
         run: |
           cd apps/backend
-          pip install -r requirements.txt
+          pip install --default-timeout=100 --only-binary :all: -r requirements.txt
 
       # Run SonarCloud scan
       - name: SonarCloud Scan

@@ -31,7 +31,7 @@ test:backend:
   image: python:3.10-slim
   script:
     - cd apps/backend
-    - pip install -r requirements.txt
+    - pip install --default-timeout=100 --only-binary :all: -r requirements.txt
     - PYTHONPATH=. pytest tests/ -v
   only:
     changes:
@@ -43,7 +43,7 @@ test:agent:
   image: python:3.10-slim
   script:
     - cd apps/agent
-    - pip install -r requirements.txt
+    - pip install --default-timeout=100 --only-binary :all: -r requirements.txt
     - if [ -d "tests" ]; then PYTHONPATH=. python -m unittest discover -s tests -v; else echo "No tests found for agent"; fi
   only:
     changes:
