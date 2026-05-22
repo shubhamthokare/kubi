@@ -50,6 +50,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!apps/frontend/src/lib/
 lib64/
 parts/
 sdist/
