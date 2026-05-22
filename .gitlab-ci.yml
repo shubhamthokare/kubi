@@ -30,9 +30,9 @@ test:backend:
   stage: test
   image: python:3.10-slim
   script:
-    - cd apps/backend
-    - pip install --default-timeout=100 --only-binary :all: -r requirements.txt
-    - PYTHONPATH=. pytest tests/ -v
+    - "cd apps/backend"
+    - "pip install --default-timeout=100 --only-binary :all: -r requirements.txt"
+    - "PYTHONPATH=. pytest tests/ -v"
   only:
     changes:
       - apps/backend/**/*
@@ -42,9 +42,9 @@ test:agent:
   stage: test
   image: python:3.10-slim
   script:
-    - cd apps/agent
-    - pip install --default-timeout=100 --only-binary :all: -r requirements.txt
-    - if [ -d "tests" ]; then PYTHONPATH=. python -m unittest discover -s tests -v; else echo "No tests found for agent"; fi
+    - "cd apps/agent"
+    - "pip install --default-timeout=100 --only-binary :all: -r requirements.txt"
+    - 'if [ -d "tests" ]; then PYTHONPATH=. python -m unittest discover -s tests -v; else echo "No tests found for agent"; fi'
   only:
     changes:
       - apps/agent/**/*
@@ -141,6 +141,6 @@ update:manifests:
     # Commit and push changes back to git (skipping CI loop)
     - git add kustomization.yaml
     - git commit -m "gitops:auto-promote image tags to commit $CI_COMMIT_SHORT_SHA [skip ci]" || echo "No image tag changes detected"
-    - git push https://oauth2:${GL_ACCESS_TOKEN}@gitlab.com/kubi-agent/kubi.git HEAD:main
+    - "git push https://oauth2:${GL_ACCESS_TOKEN}@gitlab.com/kubi-agent/kubi.git HEAD:main"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $GL_ACCESS_TOKEN'
