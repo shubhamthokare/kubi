@@ -3,18 +3,34 @@ kind: ServiceAccount
 metadata:
   name: kubi-agent-sa
   namespace: kubi
+  labels:
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: kubi
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: kubi-agent-role
+  labels:
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: kubi
 rules:
+  # Read-only: cluster state observation
   - apiGroups: [""]
-    resources: ["pods", "pods/log", "events", "nodes", "namespaces", "pods/status"]
+    resources: ["pods", "pods/log", "pods/status", "events", "nodes", "namespaces", "services", "endpoints"]
     verbs: ["get", "list", "watch"]
+  # Execute: in-pod diagnostics (e.g. checking process state)
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  # Read-only: workload state
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  # Write: remediation execution (restart, rollback, scale)
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets", "daemonsets"]
-    verbs: ["get", "list", "watch", "patch", "update"]
+    verbs: ["patch", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

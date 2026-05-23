@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import RedirectResponse
 from app.core.config import settings
 from app.core.auth import create_access_token
+from app.core.security import rate_limit
 import urllib.parse
 import requests
 import logging
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-@router.get("/login/{provider}")
+@router.get("/login/{provider}", dependencies=[Depends(rate_limit(20))])
 async def login(provider: str):
     if provider not in ["google", "github", "gitlab"]:
         raise HTTPException(status_code=400, detail="Unsupported authentication provider")
@@ -43,7 +44,7 @@ async def login(provider: str):
     url = f"{auth_url}?{urllib.parse.urlencode(params)}"
     return RedirectResponse(url=url)
 
-@router.get("/callback")
+@router.get("/callback", dependencies=[Depends(rate_limit(20))])
 async def callback(code: str, state: str):
     provider = state
     if provider not in ["google", "github", "gitlab"]:
@@ -135,7 +136,7 @@ async def callback(code: str, state: str):
         logging.exception(f"Error during SSO auth code exchange: {e}")
         raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
 
-@router.get("/dev-token")
+@router.get("/dev-token", dependencies=[Depends(rate_limit(5))])
 async def dev_token(username: str = "dev-sre", scopes: str = "sre:read,sre:write"):
     scope_list = [s.strip() for s in scopes.split(",") if s.strip()]
     token = create_access_token(username=username, scopes=scope_list)
