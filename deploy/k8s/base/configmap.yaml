@@ -11,6 +11,8 @@ data:
   BACKEND_URL: "http://kubi-backend-service:8000"
   AGENT_URL: "http://kubi-agent-service:8080"
   FRONTEND_URL: "http://kubi-frontend-service:80"
+  DOMAIN: "8.231.96.95"
+  DOMAIN_NAME: "8.231.96.95"
   # Elasticsearch (in-cluster, security disabled for dev)
   ELASTICSEARCH_HOST: "http://elasticsearch-service:9200"
   ELASTICSEARCH_INDEX: "kubi-incidents"
@@ -24,6 +26,3 @@ data:
   ELASTICSEARCH_REPLICAS: "0"
   # CORS — allow all local + tunnel origins
   CORS_ORIGINS: "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:49262,http://192.168.49.2:30001"
-  # Global Domain Configuration
-  DOMAIN_NAME: "Global"
-  DOMAIN: "Global"
