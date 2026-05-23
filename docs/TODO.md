@@ -34,8 +34,8 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 - [x] **Identity & SSO Authentication**: Implement OIDC/OAuth2 bindings (Google Workspace, GitHub, GitLab) for dashboard login (full backend auth exchanges and premium frontend redirect/callbacks established).
 - [x] **SSO Redirect Fix**: Patched mock dev OIDC flow to redirect to relative `/auth/callback` — eliminates `localhost:8000` redirect failures in GKE.
 - [x] **Rate Limiting Fix**: Updated `security.py` to extract real client IP from `X-Forwarded-For` header, preventing `429 Too Many Requests` when all traffic originates from the Next.js reverse-proxy pod IP.
-- [ ] **RBAC Rule Optimization**: Restrict Kubernetes `ClusterRoles` to minimum required operation sets.
-- [ ] **API Protection**: Apply JWT scopes and rate-limiting rules across all public API routes.
+- [x] **RBAC Rule Optimization**: Restrict Kubernetes `ClusterRoles` to minimum required operation sets. Backend role is now read-only (`get`, `list`, `watch`); only `kubi-agent` retains write verbs (`patch`, `update`) plus `replicasets` (rollback) and `pods/exec` (diagnostics).
+- [x] **API Protection**: Rate-limiting applied to all auth routes (`/login` 20/min, `/callback` 20/min, `/dev-token` 5/min). All data API routes already carry JWT scope guards (`sre:read` / `sre:write`). Ingest endpoint is network-scoped (ClusterIP only).
 - [x] **Elasticsearch Token Authentication**: Supported secure token-based API Key authentication flows.
 
 ---
