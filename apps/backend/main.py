@@ -74,6 +74,67 @@ async def lifespan(app: FastAPI):
     # Startup
     await connect_to_mongo()
     
+    # Seed default GKE direct cluster connection if settings are empty or not initialized
+    try:
+        from app.db.database import get_db
+        db = get_db()
+        existing = await db.settings.find_one({"id": "system_config"})
+        
+        default_cluster = {
+            "id": "kubi-internal-agent",
+            "name": "Local Kubi Cluster",
+            "auth_type": "kubeconfig",
+            "kubeconfig": (
+                "apiVersion: v1\n"
+                "kind: Config\n"
+                "clusters:\n"
+                "- name: local-cluster\n"
+                "  cluster:\n"
+                "    server: https://kubernetes.default.svc\n"
+                "    insecure-skip-tls-verify: true\n"
+                "contexts:\n"
+                "- name: local-context\n"
+                "  context:\n"
+                "    cluster: local-cluster\n"
+                "    user: dummy\n"
+                "current-context: local-context\n"
+                "users:\n"
+                "- name: dummy\n"
+                "  user:\n"
+                "    token: dummy"
+            ),
+            "namespace": "*",
+            "agent_url": "http://kubi-agent-service:8080"
+        }
+        
+        if not existing:
+            print("Seeding new system_config with pre-configured direct GKE cluster connection...")
+            await db.settings.insert_one({
+                "id": "system_config",
+                "namespaces": ["default"],
+                "scan_interval": 30,
+                "gemini_model": "gemini-2.5-pro",
+                "gitlab_enabled": False,
+                "gitlab_api_url": "",
+                "gitlab_private_token": "",
+                "gemini_api_key": "",
+                "clusters": [default_cluster],
+                "active_cluster_id": "kubi-internal-agent"
+            })
+        elif "clusters" not in existing or not existing["clusters"]:
+            print("Seeding empty GKE clusters list with pre-configured direct cluster connection...")
+            await db.settings.update_one(
+                {"id": "system_config"},
+                {"$set": {
+                    "clusters": [default_cluster],
+                    "active_cluster_id": "kubi-internal-agent"
+                }}
+            )
+        else:
+            print("System config already seeded with active clusters.")
+    except Exception as se:
+        print(f"Failed to seed default cluster configuration: {se}")
+    
     # Validate Gemini API Key connection
     try:
         from app.services.gemini_service import GeminiService
