@@ -269,35 +269,6 @@ async def get_settings():
     db = get_db()
     settings_doc = await db.settings.find_one({"id": "system_config"})
     
-    default_kubeconfig = (
-        "apiVersion: v1\n"
-        "kind: Config\n"
-        "clusters:\n"
-        "- name: local-cluster\n"
-        "  cluster:\n"
-        "    server: https://kubernetes.default.svc\n"
-        "    insecure-skip-tls-verify: true\n"
-        "contexts:\n"
-        "- name: local-context\n"
-        "  context:\n"
-        "    cluster: local-cluster\n"
-        "    user: dummy\n"
-        "current-context: local-context\n"
-        "users:\n"
-        "- name: dummy\n"
-        "  user:\n"
-        "    token: dummy"
-    )
-    
-    default_cluster_entry = {
-        "id": "kubi-internal-agent",
-        "name": "Local Kubi Cluster",
-        "auth_type": "kubeconfig",
-        "agent_url": "http://kubi-agent-service:8080",
-        "namespace": "*",
-        "kubeconfig": default_kubeconfig
-    }
-    
     if not settings_doc:
         settings_doc = {
             "namespaces": ["default"],
@@ -308,14 +279,9 @@ async def get_settings():
             "gitlab_api_url": "",
             "gitlab_private_token": "",
             "gemini_api_key": "",
-            "clusters": [default_cluster_entry],
-            "active_cluster_id": "kubi-internal-agent"
+            "clusters": [],
+            "active_cluster_id": None
         }
-    else:
-        # Seed clusters list if it doesn't exist
-        if "clusters" not in settings_doc or not settings_doc["clusters"]:
-            settings_doc["clusters"] = [default_cluster_entry]
-            settings_doc["active_cluster_id"] = "kubi-internal-agent"
     settings_doc["_id"] = str(settings_doc.get("_id", "new"))
     
     # Mask credentials to prevent exposure in frontend UI
