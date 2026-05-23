@@ -1,0 +1,9 @@
+# GitLab Agent configuration for Kubi Platform (CD Agent)
+gitops:
+  manifest_projects:
+    - id: kubi-agent/kubi
+      paths:
+        - glob: 'deploy/manifests/hydrated.yaml'
+observability:
+  logging:
+    level: debug

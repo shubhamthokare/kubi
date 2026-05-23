@@ -78,9 +78,9 @@ Copy the entire contents of `gcp-key.json` and paste them as the value for the `
 ### Step 1: Verify the Agent Configuration in Git
 We have already created the agent configuration file inside the repository. Ensure it is merged into your `main` branch. This file authorizes the agent to pull manifests from your repository:
 
-* **File Path**: `.gitlab/agents/kubi-agent/config.yaml`
+* **File Path**: `.gitlab/agents/kubi-cd-agent/config.yaml`
 ```yaml
-# GitLab Agent configuration for Kubi Platform
+# GitLab Agent configuration for Kubi Platform (CD Agent)
 gitops:
   manifest_projects:
     - id: kubi-agent/kubi
@@ -99,7 +99,7 @@ You must register the agent on the GitLab UI to generate its unique cluster auth
 1. Navigate to your GitLab project page (`kubi-agent/kubi`).
 2. In the left-hand sidebar, go to **Operate > Kubernetes clusters**.
 3. Click the **Connect a cluster** (or **Integrate with an agent**) button.
-4. Select `kubi-agent` from the dropdown list (this dropdown dynamically scans `.gitlab/agents/` inside your repository).
+4. Select `kubi-cd-agent` from the dropdown list (this dropdown dynamically scans `.gitlab/agents/` inside your repository).
 5. Click **Register**.
 6. **IMPORTANT**: Copy the generated **Agent Token** and the **Helm installation command** immediately. *GitLab will never display this token again.*
 
