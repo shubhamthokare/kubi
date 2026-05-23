@@ -14,7 +14,7 @@ images:
   newTag: main-a0aa7f8b
 - name: kubi-backend
   newName: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-backend
-  newTag: main-a0aa7f8b
+  newTag: main-dfdff6c3
 - name: kubi-frontend
   newName: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-frontend
   newTag: main-a0aa7f8b
