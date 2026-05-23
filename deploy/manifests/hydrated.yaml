@@ -357,7 +357,7 @@ spec:
         envFrom:
         - configMapRef:
             name: kubi-agent-config
-        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-agent:main-3227547b
+        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-agent:main-a7edb897
         imagePullPolicy: IfNotPresent
         name: agent
         ports:
@@ -474,7 +474,7 @@ spec:
           value: ""
         - name: ELASTICSEARCH_PASSWORD
           value: ""
-        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-backend:main-3227547b
+        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-backend:main-a7edb897
         imagePullPolicy: IfNotPresent
         name: backend
         ports:
@@ -508,7 +508,7 @@ spec:
             configMapKeyRef:
               key: BACKEND_URL
               name: kubi-config
-        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-frontend:main-3227547b
+        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-frontend:main-a7edb897
         imagePullPolicy: IfNotPresent
         name: frontend
         ports:
@@ -565,10 +565,10 @@ metadata:
 spec:
   data:
   - remoteRef:
-      key: gemini-api-key
+      key: GEMINI_API_KEY
     secretKey: GEMINI_API_KEY
   - remoteRef:
-      key: gitlab-token
+      key: GITLAB_PRIVATE_TOKEN
     secretKey: GITLAB_TOKEN
   refreshInterval: 15m
   secretStoreRef:
