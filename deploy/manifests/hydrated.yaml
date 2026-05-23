@@ -195,13 +195,12 @@ metadata:
   namespace: kubi
 spec:
   ports:
-  - nodePort: 30001
-    port: 80
+  - port: 80
     protocol: TCP
     targetPort: 80
   selector:
     app: kubi-frontend
-  type: NodePort
+  type: LoadBalancer
 ---
 apiVersion: v1
 kind: Service
@@ -357,7 +356,7 @@ spec:
         envFrom:
         - configMapRef:
             name: kubi-agent-config
-        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-agent:main-a7edb897
+        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-agent:main-992235aa
         imagePullPolicy: IfNotPresent
         name: agent
         ports:
@@ -474,7 +473,7 @@ spec:
           value: ""
         - name: ELASTICSEARCH_PASSWORD
           value: ""
-        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-backend:main-a7edb897
+        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-backend:main-992235aa
         imagePullPolicy: IfNotPresent
         name: backend
         ports:
@@ -508,7 +507,7 @@ spec:
             configMapKeyRef:
               key: BACKEND_URL
               name: kubi-config
-        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-frontend:main-a7edb897
+        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-frontend:main-992235aa
         imagePullPolicy: IfNotPresent
         name: frontend
         ports:
@@ -555,7 +554,7 @@ spec:
             key: key.json
             name: gcpsm-service-account-key
             namespace: kube-system
-      projectID: kubi-gcp-project
+      projectID: stone-fortress-338918
 ---
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret

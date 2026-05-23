@@ -11,10 +11,10 @@ resources:
 images:
 - name: kubi-agent
   newName: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-agent
-  newTag: main-a7edb897
+  newTag: main-992235aa
 - name: kubi-backend
   newName: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-backend
-  newTag: main-a7edb897
+  newTag: main-992235aa
 - name: kubi-frontend
   newName: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-frontend
-  newTag: main-a7edb897
+  newTag: main-992235aa
