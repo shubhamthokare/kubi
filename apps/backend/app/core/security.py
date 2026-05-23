@@ -54,6 +54,11 @@ rate_limiter = InMemoryRateLimiter()
 
 def rate_limit(limit: int, window: int = 60):
     async def dependency(request: Request):
-        ip = request.client.host if request.client else "127.0.0.1"
+        # Extract the original client IP behind proxy/load balancer/Next.js rewrite
+        x_forwarded_for = request.headers.get("x-forwarded-for")
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(",")[0].strip()
+        else:
+            ip = request.headers.get("x-real-ip") or (request.client.host if request.client else "127.0.0.1")
         rate_limiter.check_rate_limit(ip, limit, window)
     return dependency
