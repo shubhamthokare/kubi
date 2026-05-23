@@ -111,7 +111,7 @@ class TestPhase1Security(unittest.TestCase):
         with patch('app.api.auth_routes.settings.SSO_CLIENT_ID', ''):
             response = client.get("/api/auth/login/google", follow_redirects=False)
             self.assertEqual(response.status_code, 307)
-            self.assertIn("/api/auth/callback?code=mock_dev_code&state=google", response.headers["location"])
+            self.assertIn("/auth/callback?code=mock_dev_code&state=google", response.headers["location"])
 
     @patch('app.db.database.get_db')
     def test_protected_routes_authorization(self, mock_get_db):

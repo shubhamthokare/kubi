@@ -17,7 +17,7 @@ async def login(provider: str):
 
     # If client ID or secret are missing, perform immediate mock dev fallback redirection
     if not settings.SSO_CLIENT_ID or not settings.SSO_CLIENT_SECRET:
-        mock_callback_url = f"{settings.SSO_REDIRECT_URI}?code=mock_dev_code&state={provider}"
+        mock_callback_url = f"/auth/callback?code=mock_dev_code&state={provider}"
         logger.info(f"OIDC credentials not set. Falling back to local dev redirect: {mock_callback_url}")
         return RedirectResponse(url=mock_callback_url)
 
