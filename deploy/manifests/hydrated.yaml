@@ -485,7 +485,7 @@ spec:
             configMapKeyRef:
               key: DOMAIN
               name: kubi-config
-        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-backend:main-dfdff6c3
+        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-backend:main-164015a7
         imagePullPolicy: IfNotPresent
         name: backend
         ports:
