@@ -86,7 +86,25 @@ build:backend:
   services:
     - docker:24.0.5-dind
   script:
-    - echo "$GCP_SERVICE_KEY" | docker login -u _json_key --password-stdin https://asia-south1-docker.pkg.dev
+    - |
+      if [ -f "$GCP_SERVICE_KEY" ]; then
+        KEY_CONTENT=$(cat "$GCP_SERVICE_KEY")
+      elif [ -n "$GCP_SERVICE_KEY" ]; then
+        KEY_CONTENT="$GCP_SERVICE_KEY"
+      else
+        echo "❌ Error: GCP_SERVICE_KEY is empty or not defined. Configure it in GitLab Settings > CI/CD > Variables."
+        exit 1
+      fi
+      if [[ "$KEY_CONTENT" != "{"* ]]; then
+        echo "🔓 Detecting Base64 encoded key, decoding..."
+        DECODED_KEY=$(echo "$KEY_CONTENT" | base64 -d 2>/dev/null || echo "$KEY_CONTENT" | base64 --decode 2>/dev/null || echo "")
+        if [[ "$DECODED_KEY" == "{"* ]]; then
+          KEY_CONTENT="$DECODED_KEY"
+        else
+          echo "⚠️ Warning: Key does not start with '{' even after base64 decoding attempt."
+        fi
+      fi
+      echo "$KEY_CONTENT" | docker login -u _json_key --password-stdin https://asia-south1-docker.pkg.dev
     - docker build -t "$BACKEND_IMAGE" apps/backend/
     - docker push "$BACKEND_IMAGE"
   only:
@@ -100,7 +118,25 @@ build:frontend:
   services:
     - docker:24.0.5-dind
   script:
-    - echo "$GCP_SERVICE_KEY" | docker login -u _json_key --password-stdin https://asia-south1-docker.pkg.dev
+    - |
+      if [ -f "$GCP_SERVICE_KEY" ]; then
+        KEY_CONTENT=$(cat "$GCP_SERVICE_KEY")
+      elif [ -n "$GCP_SERVICE_KEY" ]; then
+        KEY_CONTENT="$GCP_SERVICE_KEY"
+      else
+        echo "❌ Error: GCP_SERVICE_KEY is empty or not defined. Configure it in GitLab Settings > CI/CD > Variables."
+        exit 1
+      fi
+      if [[ "$KEY_CONTENT" != "{"* ]]; then
+        echo "🔓 Detecting Base64 encoded key, decoding..."
+        DECODED_KEY=$(echo "$KEY_CONTENT" | base64 -d 2>/dev/null || echo "$KEY_CONTENT" | base64 --decode 2>/dev/null || echo "")
+        if [[ "$DECODED_KEY" == "{"* ]]; then
+          KEY_CONTENT="$DECODED_KEY"
+        else
+          echo "⚠️ Warning: Key does not start with '{' even after base64 decoding attempt."
+        fi
+      fi
+      echo "$KEY_CONTENT" | docker login -u _json_key --password-stdin https://asia-south1-docker.pkg.dev
     - docker build -t "$FRONTEND_IMAGE" --build-arg NEXT_PUBLIC_API_URL="http://kubi-backend-service:8000" apps/frontend/
     - docker push "$FRONTEND_IMAGE"
   only:
@@ -114,7 +150,25 @@ build:agent:
   services:
     - docker:24.0.5-dind
   script:
-    - echo "$GCP_SERVICE_KEY" | docker login -u _json_key --password-stdin https://asia-south1-docker.pkg.dev
+    - |
+      if [ -f "$GCP_SERVICE_KEY" ]; then
+        KEY_CONTENT=$(cat "$GCP_SERVICE_KEY")
+      elif [ -n "$GCP_SERVICE_KEY" ]; then
+        KEY_CONTENT="$GCP_SERVICE_KEY"
+      else
+        echo "❌ Error: GCP_SERVICE_KEY is empty or not defined. Configure it in GitLab Settings > CI/CD > Variables."
+        exit 1
+      fi
+      if [[ "$KEY_CONTENT" != "{"* ]]; then
+        echo "🔓 Detecting Base64 encoded key, decoding..."
+        DECODED_KEY=$(echo "$KEY_CONTENT" | base64 -d 2>/dev/null || echo "$KEY_CONTENT" | base64 --decode 2>/dev/null || echo "")
+        if [[ "$DECODED_KEY" == "{"* ]]; then
+          KEY_CONTENT="$DECODED_KEY"
+        else
+          echo "⚠️ Warning: Key does not start with '{' even after base64 decoding attempt."
+        fi
+      fi
+      echo "$KEY_CONTENT" | docker login -u _json_key --password-stdin https://asia-south1-docker.pkg.dev
     - docker build -t "$AGENT_IMAGE" apps/agent/
     - docker push "$AGENT_IMAGE"
   only:
@@ -141,9 +195,12 @@ update:manifests:
     - kustomize edit set image kubi-backend="$BACKEND_IMAGE"
     - kustomize edit set image kubi-frontend="$FRONTEND_IMAGE"
     - kustomize edit set image kubi-agent="$AGENT_IMAGE"
+    # Hydrate Kustomize manifests into a single flat file for GitLab Agent pull GitOps
+    - mkdir -p ../manifests
+    - kustomize build . -o ../manifests/hydrated.yaml
     # Commit and push changes back to git (skipping CI loop)
-    - git add kustomization.yaml
-    - git commit -m "gitops:auto-promote image tags to commit $CI_COMMIT_SHORT_SHA [skip ci]" || echo "No image tag changes detected"
+    - git add kustomization.yaml ../manifests/hydrated.yaml
+    - git commit -m "gitops:auto-promote and hydrate image tags to commit $CI_COMMIT_SHORT_SHA [skip ci]" || echo "No image tag changes detected"
     - "git push https://oauth2:${GL_ACCESS_TOKEN}@gitlab.com/kubi-agent/kubi.git HEAD:main"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $GL_ACCESS_TOKEN'

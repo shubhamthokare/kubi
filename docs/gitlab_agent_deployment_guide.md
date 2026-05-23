@@ -85,10 +85,10 @@ gitops:
   manifest_projects:
     - id: kubi-agent/kubi
       paths:
-        - glob: 'deploy/k8s/**/*.yaml'
+        - glob: 'deploy/manifests/hydrated.yaml'
 observability:
   logging:
-    level: info
+    level: debug
 ```
 
 ---

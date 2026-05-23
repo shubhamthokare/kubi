@@ -27,6 +27,16 @@ spec:
             secretKeyRef:
               name: kubi-secrets
               key: GEMINI_API_KEY
+        - name: GITLAB_PRIVATE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: kubi-secrets
+              key: GITLAB_TOKEN
+        - name: GITLAB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: kubi-secrets
+              key: GITLAB_TOKEN
         # ── Arize Tracing ─────────────────────────────────────────
         - name: ENVIRONMENT
           value: "production"

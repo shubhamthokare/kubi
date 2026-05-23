@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # ── GitLab ───────────────────────────────────────────────────
     GITLAB_API_URL: str = get_secret("GITLAB_API_URL", "https://gitlab.com/api/v4")
-    GITLAB_PRIVATE_TOKEN: str = get_secret("GITLAB_PRIVATE_TOKEN", "")
+    GITLAB_PRIVATE_TOKEN: str = get_secret("GITLAB_PRIVATE_TOKEN", "") or get_secret("GITLAB_TOKEN", "")
 
     # ── MongoDB ───────────────────────────────────────────────────
     MONGODB_URL: str = get_secret("MONGODB_URL", "mongodb://localhost:27017")
