@@ -4,11 +4,10 @@ metadata:
   name: kubi-frontend-service
   namespace: kubi
 spec:
-  type: NodePort # Or NodePort for local dev
+  type: LoadBalancer
   selector:
     app: kubi-frontend
   ports:
     - protocol: TCP
       port: 80
       targetPort: 80
-      nodePort: 30001
