@@ -38,13 +38,41 @@ class ElasticMCPService:
         except Exception as e:
             logging.exception(f"Failed to fetch logs from local Elasticsearch: {e}")
 
-        # 2. In a real MCP setup, we'd send a JSON-RPC request to the MCP server.
+        # 2. In a real MCP setup, we send a JSON-RPC request to the MCP server.
         try:
-            response = await self.client.get("/health")
+            payload = {
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+                "params": {
+                    "name": "get_logs",
+                    "arguments": {
+                        "service_name": service_name,
+                        "time_range_mins": time_range_mins
+                    }
+                },
+                "id": 1
+            }
+            # Try /tools/call first (Standard MCP POST/SSE transport endpoint)
+            response = await self.client.post("/tools/call", json=payload, timeout=10.0)
+            if response.status_code == 404:
+                # Fallback to direct POST root endpoint (common for simple custom JSON-RPC servers)
+                response = await self.client.post("/", json=payload, timeout=10.0)
+                
             if response.status_code == 200:
-                pass
-        except httpx.RequestError:
-            logger.warning("Elastic MCP server unreachable, using mock fallback.")
+                res_data = response.json()
+                if "error" in res_data:
+                    logger.error(f"Elastic MCP JSON-RPC error response: {res_data['error']}")
+                else:
+                    # Parse standard MCP result content block
+                    result = res_data.get("result", {})
+                    content_list = result.get("content", [])
+                    if content_list and isinstance(content_list, list):
+                        text_content = content_list[0].get("text", "").strip()
+                        if text_content:
+                            logger.info(f"Successfully retrieved logs via Elastic MCP JSON-RPC for {service_name}")
+                            return text_content
+        except Exception as e:
+            logger.warning(f"Elastic MCP JSON-RPC call failed: {e}. Falling back to simulated log data.")
 
         # 3. Fallback to simulated data if no other logs are found
         return f"Mock Log Entry 1: ERROR in {service_name}: Connection timeout.\nMock Log Entry 2: WARN Retrying connection."

@@ -17,10 +17,12 @@ cache:
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
-  # Docker Image Tagging Scheme using Git commits
-  BACKEND_IMAGE: "shubhamthokare/kubi-backend:$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
-  FRONTEND_IMAGE: "shubhamthokare/kubi-frontend:$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
-  AGENT_IMAGE: "shubhamthokare/kubi-agent:$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+  # GCP Configuration for Artifact Registry (Can be overridden in GitLab CI/CD Variables)
+  GCP_PROJECT_ID: "PROJECT_ID"
+  # Docker Image Tagging Scheme using Google Artifact Registry
+  BACKEND_IMAGE: "asia-south1-docker.pkg.dev/$GCP_PROJECT_ID/kubi-repo/kubi-backend:$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+  FRONTEND_IMAGE: "asia-south1-docker.pkg.dev/$GCP_PROJECT_ID/kubi-repo/kubi-frontend:$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+  AGENT_IMAGE: "asia-south1-docker.pkg.dev/$GCP_PROJECT_ID/kubi-repo/kubi-agent:$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 🧪 Stage: Test (Continuous Integration)
@@ -84,7 +86,7 @@ build:backend:
   services:
     - docker:24.0.5-dind
   script:
-    - docker login -u "$DOCKER_HUB_USERNAME" -p "$DOCKER_HUB_PASSWORD"
+    - echo "$GCP_SERVICE_KEY" | docker login -u _json_key --password-stdin https://asia-south1-docker.pkg.dev
     - docker build -t "$BACKEND_IMAGE" apps/backend/
     - docker push "$BACKEND_IMAGE"
   only:
@@ -98,7 +100,7 @@ build:frontend:
   services:
     - docker:24.0.5-dind
   script:
-    - docker login -u "$DOCKER_HUB_USERNAME" -p "$DOCKER_HUB_PASSWORD"
+    - echo "$GCP_SERVICE_KEY" | docker login -u _json_key --password-stdin https://asia-south1-docker.pkg.dev
     - docker build -t "$FRONTEND_IMAGE" --build-arg NEXT_PUBLIC_API_URL="http://kubi-backend-service:8000" apps/frontend/
     - docker push "$FRONTEND_IMAGE"
   only:
@@ -112,7 +114,7 @@ build:agent:
   services:
     - docker:24.0.5-dind
   script:
-    - docker login -u "$DOCKER_HUB_USERNAME" -p "$DOCKER_HUB_PASSWORD"
+    - echo "$GCP_SERVICE_KEY" | docker login -u _json_key --password-stdin https://asia-south1-docker.pkg.dev
     - docker build -t "$AGENT_IMAGE" apps/agent/
     - docker push "$AGENT_IMAGE"
   only:

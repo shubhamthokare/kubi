@@ -4,9 +4,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - configmap.yaml
+  - secrets/ClusterSecretStore.yaml
+  - secrets/ExternalSecret.yaml
 
-secretGenerator:
-  - name: kubi-secrets
-    namespace: kubi
-    envs:
-      - .env
+

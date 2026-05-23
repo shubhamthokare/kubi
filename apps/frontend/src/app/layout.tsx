@@ -1,14 +1,12 @@
 'use client';
 
-import type { Metadata } from "next";
+import React from 'react';
 import "./globals.css";
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { Activity } from 'lucide-react';
-import { Box, Stack, Avatar, Typography, Chip } from '@mui/material';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { LayoutDashboard, AlertCircle, BarChart3, Settings } from 'lucide-react';
+import { Box } from '@mui/material';
+import { usePathname, useRouter } from 'next/navigation';
+import Navbar from '@/components/Navbar';
 
 const darkTheme = createTheme({
   palette: {
@@ -41,9 +39,14 @@ const darkTheme = createTheme({
   },
 });
 
-import Navbar from '@/components/Navbar';
-
 function Layout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isAuthPage = pathname === '/login' || pathname?.startsWith('/auth/callback');
+
+  if (isAuthPage) {
+    return <>{children}</>;
+  }
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <Navbar />
@@ -60,6 +63,18 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const pathname = usePathname();
+  const router = useRouter();
+
+  React.useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    const isAuthPage = pathname === '/login' || pathname?.startsWith('/auth/callback');
+
+    if (!token && !isAuthPage) {
+      router.push('/login');
+    }
+  }, [pathname, router]);
+
   return (
     <html lang="en">
       <head>

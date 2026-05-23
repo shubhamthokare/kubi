@@ -1,0 +1,9 @@
+# GitLab Agent configuration for Kubi Platform
+gitops:
+  manifest_projects:
+    - id: kubi-agent/kubi
+      paths:
+        - glob: 'deploy/k8s/**/*.yaml'
+observability:
+  logging:
+    level: debug

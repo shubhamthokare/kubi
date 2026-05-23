@@ -37,7 +37,7 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 *$py.class
-
+__pycache__
 # C extensions
 *.so
 
@@ -85,6 +85,8 @@ coverage.xml
 .ruamel/
 .mypy_cache/
 .ruff_cache/
+coverage/
+*.tmp
 
 # Jupyter Notebooks
 .ipynb_checkpoints
@@ -97,6 +99,12 @@ node_modules/
 jspm_packages/
 .pnp
 .pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+next-env.d.ts
 
 # Next.js build outputs
 .next/
@@ -156,3 +164,40 @@ deploy/k8s/base/.env
 # Kubernetes Secrets
 kubeconfig*
 secrets.dev.yaml
+deploy/k8s/base/secrets/*.yaml
+deploy/k8s/overlays/**/secrets/*.yaml
+
+# Allow public structural secrets manifests
+!deploy/k8s/base/secrets/ClusterSecretStore.yaml
+!deploy/k8s/base/secrets/ExternalSecret.yaml
+
+# Deployment (Helm & Kubernetes)
+helm/*.tgz
+helm/charts/
+
+# Terraform Sensitive Files
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+
+# Cloud Provider & Service Account Keys
+*key.json
+gcp-*.json
+*service-account*.json
+credentials*.json
+secret-*.json
+.aws/
+.gcloud/
+
+# Database Files
+*.db
+*.sqlite
+*.sqlite3
+
+# General Credentials & Passwords
+*.passwd
+*.password
+*.pwd
+

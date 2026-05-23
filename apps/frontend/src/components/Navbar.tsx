@@ -12,6 +12,7 @@ import {
   Bell,
   Server,
   ChevronDown,
+  LogOut,
 } from "lucide-react";
 import {
   AppBar,
@@ -80,6 +81,32 @@ export default function Navbar() {
     localStorage.setItem("active_cluster_id", nextClusterId);
     setActiveCluster(nextClusterId);
     window.location.reload();
+  };
+
+  const [username, setUsername] = React.useState<string>("");
+  
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedUser = localStorage.getItem("username") || "Dev SRE";
+      setUsername(storedUser);
+    }
+  }, []);
+
+  const getInitials = (name: string) => {
+    if (!name) return "SRE";
+    const clean = name.split("@")[0].replace("dev-sre-", "").replace("dev-", "");
+    if (clean.length >= 2) {
+      return clean.substring(0, 2).toUpperCase();
+    }
+    return clean.toUpperCase();
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("username");
+    localStorage.removeItem("user_scopes");
+    localStorage.removeItem("auth_provider");
+    window.location.href = "/login";
   };
 
   return (
@@ -271,18 +298,32 @@ export default function Navbar() {
               flexItem
               sx={{ mx: 1, borderColor: "rgba(255,255,255,0.1)" }}
             />
-            <Avatar
-              sx={{
-                width: 32,
-                height: 32,
-                bgcolor: "secondary.main",
-                fontSize: "0.8rem",
-                fontWeight: "bold",
-                cursor: "pointer",
-              }}
-            >
-              AS
-            </Avatar>
+            <Stack direction="row" alignItems="center" spacing={1.5}>
+              <Avatar
+                sx={{
+                  width: 32,
+                  height: 32,
+                  bgcolor: "secondary.main",
+                  fontSize: "0.8rem",
+                  fontWeight: "bold",
+                }}
+              >
+                {getInitials(username)}
+              </Avatar>
+              <Typography variant="body2" fontWeight="600" color="white" sx={{ display: { xs: "none", lg: "block" } }}>
+                {username.split("@")[0]}
+              </Typography>
+              <IconButton 
+                onClick={handleLogout} 
+                sx={{ 
+                  color: "error.main",
+                  "&:hover": { bgcolor: "rgba(248, 113, 113, 0.1)" }
+                }}
+                title="Logout"
+              >
+                <LogOut size={18} />
+              </IconButton>
+            </Stack>
           </Stack>
         </Toolbar>
       </Container>

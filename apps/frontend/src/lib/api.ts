@@ -5,11 +5,15 @@ const BASE_URL = typeof window !== 'undefined'
 export const api = {
   async get(endpoint: string) {
     const clusterId = typeof window !== 'undefined' ? localStorage.getItem('active_cluster_id') : null;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
     if (clusterId) {
       headers['x-cluster-id'] = clusterId;
+    }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
     const response = await fetch(`${BASE_URL}${endpoint}`, {
       method: 'GET',
@@ -21,11 +25,15 @@ export const api = {
 
   async post(endpoint: string, data?: any) {
     const clusterId = typeof window !== 'undefined' ? localStorage.getItem('active_cluster_id') : null;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
     if (clusterId) {
       headers['x-cluster-id'] = clusterId;
+    }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
     const response = await fetch(`${BASE_URL}${endpoint}`, {
       method: 'POST',

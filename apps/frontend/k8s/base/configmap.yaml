@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: kubi-config
-  namespace: kubi
-data:
-  MONGODB_URL: "mongodb://mongodb-service:27017"
-  DATABASE_NAME: "kubi"
-  BACKEND_URL: "http://kubi-backend-service:8000"

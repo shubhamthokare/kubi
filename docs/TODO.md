@@ -29,8 +29,8 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 ---
 
 ## 🛡️ Phase 1: Security & Hardening
-- [ ] **Vault / Secret Manager Integration**: Pull runtime secrets directly from HashiCorp Vault or cloud providers.
-- [ ] **Identity & SSO Authentication**: Implement OIDC/OAuth2 bindings (Google Workspace, GitHub, GitLab) for dashboard login.
+- [x] **Vault / Secret Manager Integration**: Pull runtime secrets directly from HashiCorp Vault or cloud providers (integrated Google Secret Manager via External Secrets Operator).
+- [x] **Identity & SSO Authentication**: Implement OIDC/OAuth2 bindings (Google Workspace, GitHub, GitLab) for dashboard login (full backend auth exchanges and premium frontend redirect/callbacks established).
 - [ ] **RBAC Rule Optimization**: Restrict Kubernetes `ClusterRoles` to minimum required operation sets.
 - [ ] **API Protection**: Apply JWT scopes and rate-limiting rules across all public API routes.
 - [x] **Elasticsearch Token Authentication**: Supported secure token-based API Key authentication flows.
@@ -46,7 +46,7 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 ---
 
 ## 🛡️ Phase 3: Observability Extensions
-- [ ] **Prometheus Metrics bindings**: Incorporate resource telemetry (CPU/Memory usage charts) directly into incident timelines (e.g., automated OOM detection).
+- [x] **Prometheus Metrics bindings**: Incorporate resource telemetry (CPU/Memory usage charts) directly into incident timelines (integrated Prometheus & Grafana stack via upgraded Helm orchestrators).
 - [ ] **ChatOps Notifications**: Trigger instant Slack, Teams, or Discord alerts upon incident discovery or remediation success.
 - [ ] **Log Tail streams**: Implement live Websocket streaming for active container logs inside the dashboard logs viewer.
 
@@ -57,6 +57,6 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 - [ ] **Safe-mode Rollback guards**: Monitor workloads for 5 minutes post-remediation and auto-rollback if health checks degrade.
 
 ---
-*Last Updated: May 22, 2026*  
+*Last Updated: May 23, 2026*  
 *Project Stage: Phase 1 (Active)*
 

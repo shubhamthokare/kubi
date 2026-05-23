@@ -1,0 +1,193 @@
+'use client';
+
+import React, { Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Loader2, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { Box, Card, Stack, Typography, Button, Container } from '@mui/material';
+
+function CallbackContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [status, setStatus] = React.useState<'loading' | 'success' | 'error'>('loading');
+  const [errorMsg, setErrorMsg] = React.useState<string>('');
+
+  React.useEffect(() => {
+    const code = searchParams.get('code');
+    const state = searchParams.get('state');
+
+    if (!code || !state) {
+      setStatus('error');
+      setErrorMsg('Missing authorization parameters from provider.');
+      return;
+    }
+
+    async function exchangeCode() {
+      try {
+        const response = await fetch(`/api/auth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`);
+        
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.detail || 'Authorization code exchange failed.');
+        }
+
+        const data = await response.json();
+        
+        // Save SRE session variables
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('username', data.username);
+        localStorage.setItem('user_scopes', JSON.stringify(data.scopes || []));
+        localStorage.setItem('auth_provider', data.provider);
+
+        setStatus('success');
+        
+        // Brief delay for visual confirmation
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 1500);
+      } catch (err: any) {
+        console.error('Error during SSO callback:', err);
+        setStatus('error');
+        setErrorMsg(err.message || 'Failed to establish SRE session.');
+      }
+    }
+
+    exchangeCode();
+  }, [searchParams, router]);
+
+  return (
+    <Card
+      sx={{
+        p: 4.5,
+        bgcolor: 'rgba(30, 41, 59, 0.7)',
+        backdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+        borderRadius: 4,
+        textAlign: 'center',
+        minWidth: 320,
+      }}
+    >
+      {status === 'loading' && (
+        <Stack spacing={3} alignItems="center">
+          <Loader2 className="animate-spin" color="#60a5fa" size={48} />
+          <Typography variant="h6" fontWeight="700" color="white">
+            Establishing SRE Session
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Exchanging OAuth2 code & verifying cluster access scopes...
+          </Typography>
+        </Stack>
+      )}
+
+      {status === 'success' && (
+        <Stack spacing={3} alignItems="center">
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              bgcolor: 'rgba(52, 211, 153, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '2px solid #34d399',
+            }}
+          >
+            <CheckCircle2 color="#34d399" size={32} />
+          </Box>
+          <Typography variant="h6" fontWeight="700" color="white">
+            Access Granted
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Syncing telemetry dashboard. Redirecting shortly...
+          </Typography>
+        </Stack>
+      )}
+
+      {status === 'error' && (
+        <Stack spacing={3} alignItems="center">
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              bgcolor: 'rgba(248, 113, 113, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '2px solid #f87171',
+            }}
+          >
+            <ShieldAlert color="#f87171" size={32} />
+          </Box>
+          <Typography variant="h6" fontWeight="700" color="white">
+            Authentication Failed
+          </Typography>
+          <Typography variant="body2" color="error.main" sx={{ px: 2 }}>
+            {errorMsg}
+          </Typography>
+          <Button
+            variant="outlined"
+            onClick={() => router.push('/login')}
+            sx={{
+              mt: 2,
+              textTransform: 'none',
+              fontWeight: 600,
+              color: 'white',
+              borderColor: 'rgba(255, 255, 255, 0.1)',
+              '&:hover': {
+                borderColor: 'primary.main',
+                bgcolor: 'rgba(96, 165, 250, 0.05)',
+              },
+            }}
+          >
+            Return to Login
+          </Button>
+        </Stack>
+      )}
+    </Card>
+  );
+}
+
+export default function CallbackPage() {
+  return (
+    <Box
+      sx={{
+        minHeight: '100vh',
+        bgcolor: '#0f172a',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'radial-gradient(circle at 50% 50%, #1e1b4b 0%, #0f172a 100%)',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      <Container maxWidth="xs" sx={{ zIndex: 1, display: 'flex', justifyContent: 'center' }}>
+        <Suspense fallback={
+          <Card
+            sx={{
+              p: 4.5,
+              bgcolor: 'rgba(30, 41, 59, 0.7)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+              borderRadius: 4,
+              textAlign: 'center',
+              minWidth: 320,
+            }}
+          >
+            <Stack spacing={3} alignItems="center">
+              <Loader2 className="animate-spin" color="#60a5fa" size={48} />
+              <Typography variant="h6" fontWeight="700" color="white">
+                Loading Auth context...
+              </Typography>
+            </Stack>
+          </Card>
+        }>
+          <CallbackContent />
+        </Suspense>
+      </Container>
+    </Box>
+  );
+}
