@@ -24,3 +24,6 @@ data:
   ELASTICSEARCH_REPLICAS: "0"
   # CORS — allow all local + tunnel origins
   CORS_ORIGINS: "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:49262,http://192.168.49.2:30001"
+  # Global Domain Configuration
+  DOMAIN_NAME: "Global"
+  DOMAIN: "Global"

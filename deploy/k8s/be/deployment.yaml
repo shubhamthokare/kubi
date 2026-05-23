@@ -111,3 +111,14 @@ spec:
           value: ""
         - name: ELASTICSEARCH_PASSWORD
           value: ""
+        # Global Domain
+        - name: DOMAIN_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: DOMAIN_NAME
+        - name: DOMAIN
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: DOMAIN
