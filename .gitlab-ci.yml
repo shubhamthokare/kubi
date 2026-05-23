@@ -195,9 +195,12 @@ update:manifests:
     - kustomize edit set image kubi-backend="$BACKEND_IMAGE"
     - kustomize edit set image kubi-frontend="$FRONTEND_IMAGE"
     - kustomize edit set image kubi-agent="$AGENT_IMAGE"
-    # Hydrate Kustomize manifests into a single flat file for GitLab Agent pull GitOps
+    # Hydrate Kustomize manifests into a single flat file for historical Git tracking
     - mkdir -p ../manifests
     - kustomize build . -o ../manifests/hydrated.yaml
+    # Switch to the secure GitLab Agent Tunnel context and deploy directly to GKE
+    - kubectl config use-context kubi-agent/kubi:kubi-cd-agent
+    - kustomize build . | kubectl apply -f -
     # Commit and push changes back to git (skipping CI loop)
     - git add kustomization.yaml ../manifests/hydrated.yaml
     - git commit -m "gitops:auto-promote and hydrate image tags to commit $CI_COMMIT_SHORT_SHA [skip ci]" || echo "No image tag changes detected"
