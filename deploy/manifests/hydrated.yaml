@@ -122,6 +122,8 @@ data:
   BACKEND_URL: http://kubi-backend-service:8000
   CORS_ORIGINS: http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:49262,http://192.168.49.2:30001
   DATABASE_NAME: kubi
+  DOMAIN: Global
+  DOMAIN_NAME: Global
   ELASTICSEARCH_HOST: http://elasticsearch-service:9200
   ELASTICSEARCH_INDEX: kubi-incidents
   ELASTICSEARCH_INDEX_EVENTS: kubi-events
@@ -298,8 +300,8 @@ spec:
             cpu: 1000m
             memory: 1.5Gi
           requests:
-            cpu: 300m
-            memory: 768Mi
+            cpu: 50m
+            memory: 512Mi
         volumeMounts:
         - mountPath: /usr/share/elasticsearch/data
           name: es-data
@@ -356,7 +358,7 @@ spec:
         envFrom:
         - configMapRef:
             name: kubi-agent-config
-        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-agent:main-992235aa
+        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-agent:main-a0aa7f8b
         imagePullPolicy: IfNotPresent
         name: agent
         ports:
@@ -367,7 +369,7 @@ spec:
             cpu: 500m
             memory: 256Mi
           requests:
-            cpu: 250m
+            cpu: 50m
             memory: 100Mi
       serviceAccountName: kubi-agent-sa
 ---
@@ -473,7 +475,17 @@ spec:
           value: ""
         - name: ELASTICSEARCH_PASSWORD
           value: ""
-        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-backend:main-992235aa
+        - name: DOMAIN_NAME
+          valueFrom:
+            configMapKeyRef:
+              key: DOMAIN_NAME
+              name: kubi-config
+        - name: DOMAIN
+          valueFrom:
+            configMapKeyRef:
+              key: DOMAIN
+              name: kubi-config
+        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-backend:main-a0aa7f8b
         imagePullPolicy: IfNotPresent
         name: backend
         ports:
@@ -507,7 +519,7 @@ spec:
             configMapKeyRef:
               key: BACKEND_URL
               name: kubi-config
-        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-frontend:main-992235aa
+        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-frontend:main-a0aa7f8b
         imagePullPolicy: IfNotPresent
         name: frontend
         ports:
