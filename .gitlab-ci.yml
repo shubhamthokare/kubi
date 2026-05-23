@@ -107,6 +107,11 @@ build:backend:
       echo "$KEY_CONTENT" | docker login -u _json_key --password-stdin https://asia-south1-docker.pkg.dev
     - docker build -t "$BACKEND_IMAGE" apps/backend/
     - docker push "$BACKEND_IMAGE"
+    - echo "built" > build_backend.txt
+  artifacts:
+    paths:
+      - build_backend.txt
+    expire_in: 1 hour
   only:
     changes:
       - apps/backend/**/*
@@ -139,6 +144,11 @@ build:frontend:
       echo "$KEY_CONTENT" | docker login -u _json_key --password-stdin https://asia-south1-docker.pkg.dev
     - docker build -t "$FRONTEND_IMAGE" --build-arg NEXT_PUBLIC_API_URL="http://kubi-backend-service:8000" apps/frontend/
     - docker push "$FRONTEND_IMAGE"
+    - echo "built" > build_frontend.txt
+  artifacts:
+    paths:
+      - build_frontend.txt
+    expire_in: 1 hour
   only:
     changes:
       - apps/frontend/**/*
@@ -171,6 +181,11 @@ build:agent:
       echo "$KEY_CONTENT" | docker login -u _json_key --password-stdin https://asia-south1-docker.pkg.dev
     - docker build -t "$AGENT_IMAGE" apps/agent/
     - docker push "$AGENT_IMAGE"
+    - echo "built" > build_agent.txt
+  artifacts:
+    paths:
+      - build_agent.txt
+    expire_in: 1 hour
   only:
     changes:
       - apps/agent/**/*
@@ -192,9 +207,22 @@ update:manifests:
     - git pull origin main
     # Update image tags dynamically in the Kustomize config
     - cd deploy/k8s
-    - kustomize edit set image kubi-backend="$BACKEND_IMAGE"
-    - kustomize edit set image kubi-frontend="$FRONTEND_IMAGE"
-    - kustomize edit set image kubi-agent="$AGENT_IMAGE"
+    - |
+      if [ -f ../../build_backend.txt ]; then
+        kustomize edit set image kubi-backend="$BACKEND_IMAGE"
+      else
+        echo "Backend image not built in this pipeline, keeping existing tag."
+      fi
+      if [ -f ../../build_frontend.txt ]; then
+        kustomize edit set image kubi-frontend="$FRONTEND_IMAGE"
+      else
+        echo "Frontend image not built in this pipeline, keeping existing tag."
+      fi
+      if [ -f ../../build_agent.txt ]; then
+        kustomize edit set image kubi-agent="$AGENT_IMAGE"
+      else
+        echo "Agent image not built in this pipeline, keeping existing tag."
+      fi
     # Hydrate Kustomize manifests into a single flat file for historical Git tracking
     - mkdir -p ../manifests
     - kustomize build . -o ../manifests/hydrated.yaml
@@ -203,7 +231,12 @@ update:manifests:
     - kustomize build . | kubectl apply -f -
     # Commit and push changes back to git (skipping CI loop)
     - git add kustomization.yaml ../manifests/hydrated.yaml
-    - git commit -m "gitops:auto-promote and hydrate image tags to commit $CI_COMMIT_SHORT_SHA [skip ci]" || echo "No image tag changes detected"
-    - "git push https://oauth2:${GL_ACCESS_TOKEN}@gitlab.com/kubi-agent/kubi.git HEAD:main"
+    - |
+      if git diff --cached --quiet; then
+        echo "No image tag changes to commit."
+      else
+        git commit -m "gitops:auto-promote and hydrate image tags to commit $CI_COMMIT_SHORT_SHA [skip ci]"
+        git push https://oauth2:${GL_ACCESS_TOKEN}@gitlab.com/kubi-agent/kubi.git HEAD:main
+      fi
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $GL_ACCESS_TOKEN'
