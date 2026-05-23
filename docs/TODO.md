@@ -17,6 +17,7 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 - **[x] Monorepo Restructuring**: Cleanly reorganized modules into `apps/backend/`, `apps/agent/`, and `apps/frontend/`.
 - **[x] Multi-Platform Docker Orchestration**: Created `deploy-docker.ps1` and `deploy-docker.sh` wrapper utilities to launch the whole cluster stack with a single click.
 - **[x] Container Build & CI/CD Pipeline Security Hardening**: Secured container builds and runner workflows monorepo-wide using `--only-binary :all:` rules to block compromised dependency execution; established `--default-timeout=100` resilience against transient PyPI metadata server connection drops.
+- **[x] GKE Production Deployment**: All 5 workloads (`elasticsearch`, `kubi-agent`, `kubi-backend`, `kubi-frontend`, `mongodb`) running `1/1 Ready` in GKE namespace `kubi`, publicly accessible at `http://8.231.96.95`.
 
 ---
 
@@ -31,6 +32,8 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 ## 🛡️ Phase 1: Security & Hardening
 - [x] **Vault / Secret Manager Integration**: Pull runtime secrets directly from HashiCorp Vault or cloud providers (integrated Google Secret Manager via External Secrets Operator).
 - [x] **Identity & SSO Authentication**: Implement OIDC/OAuth2 bindings (Google Workspace, GitHub, GitLab) for dashboard login (full backend auth exchanges and premium frontend redirect/callbacks established).
+- [x] **SSO Redirect Fix**: Patched mock dev OIDC flow to redirect to relative `/auth/callback` — eliminates `localhost:8000` redirect failures in GKE.
+- [x] **Rate Limiting Fix**: Updated `security.py` to extract real client IP from `X-Forwarded-For` header, preventing `429 Too Many Requests` when all traffic originates from the Next.js reverse-proxy pod IP.
 - [ ] **RBAC Rule Optimization**: Restrict Kubernetes `ClusterRoles` to minimum required operation sets.
 - [ ] **API Protection**: Apply JWT scopes and rate-limiting rules across all public API routes.
 - [x] **Elasticsearch Token Authentication**: Supported secure token-based API Key authentication flows.
@@ -57,6 +60,14 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 - [ ] **Safe-mode Rollback guards**: Monitor workloads for 5 minutes post-remediation and auto-rollback if health checks degrade.
 
 ---
-*Last Updated: May 23, 2026*  
-*Project Stage: Phase 1 (Active)*
 
+## 🚀 Phase 5: GKE Deployment & Operations
+- [x] **GKE CPU Scheduling Fix**: Reduced CPU requests (`50m`) for `kubi-agent` and `elasticsearch` to resolve pod scheduling deadlocks on `e2-medium` nodes.
+- [x] **CI/CD GitOps Pipeline**: Added build sentinel artifacts and conditional Kustomize image tag updates to `.gitlab-ci.yml`; prevents empty GitOps commits.
+- [x] **Clean Deploy Policy**: Removed all auto-seeding of cluster connections at startup. Deployments begin with `clusters: []` — users add connections manually via the Settings UI.
+- [x] **Live MongoDB State Reset**: Cleared previously seeded `kubi-internal-agent` entry from GKE MongoDB (`clusters: [], active_cluster_id: null`).
+
+---
+
+*Last Updated: May 24, 2026*
+*Project Stage: Phase 2 (Active)*
