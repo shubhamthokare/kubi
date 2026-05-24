@@ -313,6 +313,79 @@ helm install kubi kubi/kubi-platform -n kubi --create-namespace
 
 ---
 
+## ☁️ 5. Google Kubernetes Engine (GKE) Connection & Deployment Guide
+
+This section outlines how to configure, connect, and orchestrate the **Kubi AI** platform in a production **Google Kubernetes Engine (GKE)** cluster.
+
+### 1. Authenticate with Google Cloud Platform (GCP)
+Ensure you have the Google Cloud CLI (`gcloud`) installed. Authenticate with your GCP account:
+```bash
+# Login to your GCP account
+gcloud auth login
+
+# Set your active GCP project ID
+gcloud config set project <YOUR_PROJECT_ID>
+```
+
+### 2. Configure GKE kubectl Authentication
+Install the mandatory GKE credentials plugin and switch your active Kubernetes context to your target GKE cluster:
+```bash
+# Install GKE authentication plugin (required for kubectl >= 1.26)
+gcloud components install gke-gcloud-auth-plugin
+
+# Retrieve GKE cluster credentials to automatically update your local ~/.kube/config
+gcloud container clusters get-credentials <YOUR_CLUSTER_NAME> \
+  --region <YOUR_CLUSTER_REGION> \
+  --project <YOUR_PROJECT_ID>
+
+# Verify target context is properly loaded and active
+kubectl config current-context
+kubectl cluster-info
+```
+
+### 3. Orchestrate with GKE SSD Storage Classes
+GKE includes standard persistent disk storage classes. When executing Kustomize or Helm installations, verify you map persistent volumes to GKE's native `premium-rwo` (SSD persistent disk) or `standard-rwo` storage classes:
+
+#### Helm GKE Deployment
+```bash
+# Install with production values, overriding storageClass for MongoDB & Elasticsearch to GKE SSDs
+helm install kubi deploy/helm/ \
+  --namespace kubi \
+  --create-namespace \
+  --set mongodb.persistence.storageClass=premium-rwo \
+  --set elasticsearch.persistence.storageClass=premium-rwo \
+  --values deploy/helm/values-prod.yaml
+```
+
+### 4. Configure Public/Internal Dashboard Routing
+To expose the **Kubi AI Dashboard** publicly or internally inside GCP:
+
+#### Option A: GCP HTTP(S) Load Balancer (Recommended for Prod)
+Update `deploy/helm/values-prod.yaml` or write GKE Ingress annotations:
+```yaml
+ingress:
+  enabled: true
+  className: "gce" # Directs GKE to provision a Google Cloud HTTP(S) Load Balancer
+  annotations:
+    networking.gke.io/managed-certificates: "kubi-cert" # GCP managed SSL
+    kubernetes.io/ingress.class: "gce"
+```
+
+#### Option B: Quick Public LoadBalancer
+For quick staging exposure, patch the frontend Service to type `LoadBalancer`, which instructs GKE to provision a network load balancer:
+```bash
+# Patch frontend service type
+kubectl patch svc kubi-frontend-service -n kubi -p '{"spec": {"type": "LoadBalancer"}}'
+
+# Watch and retrieve the External IP assigned by GCP
+kubectl get svc kubi-frontend-service -n kubi --watch
+```
+
+### 5. Accessing logs via RBAC in GKE
+Ensure that the `kubi-backend` has necessary RBAC to fetch container logs. The Helm chart sets up the standard `ClusterRole` binding in GKE which gives `kubi-backend-sa` permission to `get`, `list`, and `watch` logs across selected namespaces.
+
+---
+
 ## 🔍 Troubleshooting
 
 ### ❌ 'minikube' is not recognized
