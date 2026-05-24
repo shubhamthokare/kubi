@@ -8,6 +8,9 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  labels:
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: kubi
   name: kubi-agent-sa
   namespace: kubi
 ---
@@ -20,6 +23,9 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  labels:
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: kubi
   name: kubi-agent-role
 rules:
 - apiGroups:
@@ -27,10 +33,29 @@ rules:
   resources:
   - pods
   - pods/log
+  - pods/status
   - events
   - nodes
   - namespaces
-  - pods/status
+  - services
+  - endpoints
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/exec
+  verbs:
+  - create
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  - daemonsets
+  - replicasets
   verbs:
   - get
   - list
@@ -42,15 +67,15 @@ rules:
   - statefulsets
   - daemonsets
   verbs:
-  - get
-  - list
-  - watch
   - patch
   - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  labels:
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: kubi
   name: kubi-backend-role
 rules:
 - apiGroups:
@@ -62,6 +87,8 @@ rules:
   - nodes
   - namespaces
   - pods/status
+  - services
+  - endpoints
   verbs:
   - get
   - list
@@ -72,12 +99,11 @@ rules:
   - deployments
   - statefulsets
   - daemonsets
+  - replicasets
   verbs:
   - get
   - list
   - watch
-  - patch
-  - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
