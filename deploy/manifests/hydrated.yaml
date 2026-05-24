@@ -511,7 +511,7 @@ spec:
             configMapKeyRef:
               key: DOMAIN
               name: kubi-config
-        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-backend:main-164015a7
+        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-backend:main-08568c57
         imagePullPolicy: IfNotPresent
         name: backend
         ports:
@@ -545,7 +545,7 @@ spec:
             configMapKeyRef:
               key: BACKEND_URL
               name: kubi-config
-        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-frontend:main-a0aa7f8b
+        image: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-frontend:main-08568c57
         imagePullPolicy: IfNotPresent
         name: frontend
         ports:
