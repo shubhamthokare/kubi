@@ -85,7 +85,34 @@ class RemediationWorkflow:
         all_success = all(r.get("success", False) for r in results)
         
         if not all_success:
-            await db.plans.update_one({"plan_id": plan_id}, {"$set": {"status": "failed_execution"}})
+            final_status = "failed_execution"
+            await db.plans.update_one({"plan_id": plan_id}, {"$set": {"status": final_status}})
+            
+            # Trigger ChatOps remediation notification for failed execution
+            try:
+                from app.services.chatops_service import get_chatops_service
+                incident_doc = await db.incidents.find_one({"plan_id": plan_id})
+                pod_n = incident_doc.get("pod", {}).get("name") if incident_doc else None
+                ns_n = incident_doc.get("pod", {}).get("namespace") if incident_doc else None
+                summary_parts = [
+                    f"- {r.get('action_type', 'Action')}: {r.get('target_name', '')} -> {'Success' if r.get('success') else 'Failed'}"
+                    for r in results
+                ]
+                actions_summary = "\n".join(summary_parts)
+                async def send_remediation_chatops():
+                    chatops = await get_chatops_service()
+                    if chatops:
+                        await chatops.notify_remediation(
+                            plan_id=plan_id,
+                            pod_name=pod_n,
+                            namespace=ns_n,
+                            status=final_status,
+                            actions_summary=actions_summary
+                        )
+                asyncio.create_task(send_remediation_chatops())
+            except Exception as e:
+                logger.warning(f"Failed to initiate ChatOps remediation notification task: {e}")
+
             return {"status": "failed_execution", "execution_results": results}
             
         # Phase 4: Health Verification Polling
@@ -119,6 +146,31 @@ class RemediationWorkflow:
         
         final_status = "completed" if verified else "failed_verification"
         await db.plans.update_one({"plan_id": plan_id}, {"$set": {"status": final_status}})
+        
+        # Trigger ChatOps remediation notification for completed / failed verification
+        try:
+            from app.services.chatops_service import get_chatops_service
+            incident_doc = await db.incidents.find_one({"plan_id": plan_id})
+            pod_n = incident_doc.get("pod", {}).get("name") if incident_doc else None
+            ns_n = incident_doc.get("pod", {}).get("namespace") if incident_doc else None
+            summary_parts = [
+                f"- {r.get('action_type', 'Action')}: {r.get('target_name', '')} -> {'Success' if r.get('success') else 'Failed'}"
+                for r in results
+            ]
+            actions_summary = "\n".join(summary_parts)
+            async def send_remediation_chatops():
+                chatops = await get_chatops_service()
+                if chatops:
+                    await chatops.notify_remediation(
+                        plan_id=plan_id,
+                        pod_name=pod_n,
+                        namespace=ns_n,
+                        status=final_status,
+                        actions_summary=actions_summary
+                    )
+            asyncio.create_task(send_remediation_chatops())
+        except Exception as e:
+            logger.warning(f"Failed to initiate ChatOps remediation notification task: {e}")
         
         if verified:
             # Explicitly mark the incident as resolved for immediate feedback

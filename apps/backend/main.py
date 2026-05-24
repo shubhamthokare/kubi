@@ -117,8 +117,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.api.ws_routes import ws_router
+
 app.include_router(router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+app.include_router(ws_router, prefix="/api")
 
 @app.get("/")
 async def root():

@@ -105,6 +105,7 @@ class IncidentDetectionWorkflow:
                 else:
                     logger.info(f"An active incident for {sanitize_log(deployment_name)} has a failed/rejected plan. Re-running analysis.")
                 
+            is_new_incident = (existing_incident is None)
             logger.info(f"Analyzing failed pod: {sanitize_log(pod_ns)}/{sanitize_log(pod_name)} (UID: {sanitize_log(pod_uid)})")
             
             # Extract service name to detect infinite loops
@@ -230,6 +231,24 @@ class IncidentDetectionWorkflow:
                         )
                 except Exception as e:
                     logging.exception(f"Error indexing remediation into Elasticsearch: {e}")
+                
+                # Trigger ChatOps Notification if it's a new incident
+                if is_new_incident:
+                    try:
+                        from app.services.chatops_service import get_chatops_service
+                        async def send_chatops():
+                            chatops = await get_chatops_service()
+                            if chatops:
+                                await chatops.notify_incident(
+                                    pod_name=pod_name,
+                                    namespace=pod_ns,
+                                    cluster_id=cluster_id,
+                                    rca=rca_result,
+                                    plan_summary=remediation_plan.summary if remediation_plan else None
+                                )
+                        asyncio.create_task(send_chatops())
+                    except Exception as e:
+                        logger.warning(f"Failed to initiate ChatOps notification task: {e}")
             
         # 3. Resolution Tracking: Check if previously active incidents are now resolved
         try:

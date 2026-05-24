@@ -68,5 +68,15 @@ export const kubiApi = {
   validateGitLab: (data?: any) => api.post('/gitlab/validate', data),
   validateCluster: (data: any) => api.post('/clusters/validate', data),
   executeManualAction: (data: any) => api.post('/actions/manual', data),
+  validateChatOps: (data: any) => api.post('/chatops/validate', data),
 };
+
+
+export const getWsUrl = (path: string): string => {
+  if (typeof window === 'undefined') return '';
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host;
+  return `${protocol}//${host}/api${path}`;
+};
+
 

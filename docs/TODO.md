@@ -50,8 +50,8 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 
 ## 🛡️ Phase 3: Observability Extensions
 - [x] **Prometheus Metrics bindings**: Incorporate resource telemetry (CPU/Memory usage charts) directly into incident timelines (integrated Prometheus & Grafana stack via upgraded Helm orchestrators).
-- [ ] **ChatOps Notifications**: Trigger instant Slack, Teams, or Discord alerts upon incident discovery or remediation success.
-- [ ] **Log Tail streams**: Implement live Websocket streaming for active container logs inside the dashboard logs viewer.
+- [x] **ChatOps Notifications**: Trigger instant Slack, Teams, or Discord alerts upon incident discovery or remediation success.
+- [x] **Log Tail streams**: Implement live Websocket streaming for active container logs inside the dashboard logs viewer.
 
 ---
 

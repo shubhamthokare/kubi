@@ -144,6 +144,10 @@ class SettingsBase(BaseModel):
     clusters: Optional[List[ClusterConfig]] = []
     active_cluster_id: Optional[str] = None
     auto_remediation: Optional[bool] = False
+    # ChatOps / Webhook Notifications
+    chatops_enabled: Optional[bool] = False
+    chatops_provider: Optional[str] = "slack"   # "slack" | "teams" | "discord"
+    chatops_webhook_url: Optional[str] = ""
 
 class SettingsResponse(SettingsBase):
     _id: Optional[str] = None
@@ -180,6 +184,10 @@ class ESValidateRequest(BaseModel):
     host: Optional[str] = None
     username: Optional[str] = None
     password: Optional[str] = None
+
+class ValidateChatopsRequest(BaseModel):
+    chatops_provider: Optional[str] = "slack"
+    chatops_webhook_url: Optional[str] = ""
 
 class ValidationDetailResponse(BaseModel):
     status: str

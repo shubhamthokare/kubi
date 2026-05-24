@@ -13,7 +13,8 @@ from app.api.schemas import (
     SettingsUpdateRequest, ReportListResponse, ValidateGeminiRequest,
     ValidateGitlabRequest, ValidateClusterRequest, ESValidateRequest,
     ValidationDetailResponse, SearchResponse, ESHealthResponse,
-    ManualActionRequest, ManualRemediationRequest, ManualRemediationResponse
+    ManualActionRequest, ManualRemediationRequest, ManualRemediationResponse,
+    ValidateChatopsRequest
 )
 
 router = APIRouter()
@@ -289,6 +290,8 @@ async def get_settings():
         settings_doc["gemini_api_key"] = "••••••••••••••••"
     if settings_doc.get("gitlab_private_token"):
         settings_doc["gitlab_private_token"] = "••••••••••••••••"
+    if settings_doc.get("chatops_webhook_url"):
+        settings_doc["chatops_webhook_url"] = "••••••••••••••••"
         
     return settings_doc
 
@@ -305,7 +308,7 @@ async def update_settings(new_settings: SettingsUpdateRequest):
     existing_doc = await db.settings.find_one({"id": "system_config"}) or {}
     new_settings_dict = new_settings.model_dump(exclude_unset=True)
     
-    for credential_key in ["gemini_api_key", "gitlab_private_token"]:
+    for credential_key in ["gemini_api_key", "gitlab_private_token", "chatops_webhook_url"]:
         val = new_settings_dict.get(credential_key)
         if val and all(c in "*•" for c in val):
             if existing_doc.get(credential_key):
@@ -378,6 +381,71 @@ async def validate_gitlab(data: Optional[ValidateGitlabRequest] = None):
     req_data = data.model_dump(exclude_unset=True) if data else None
     result = await gitlab_service.validate_connection(req_data)
     return result
+
+@router.post("/chatops/validate", response_model=ValidationDetailResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
+async def validate_chatops(data: ValidateChatopsRequest):
+    """
+    Test the ChatOps Webhook connection by sending a test message.
+    """
+    from app.services.chatops_service import ChatOpsService
+    from app.db.database import get_db
+    
+    url = data.chatops_webhook_url
+    # If the user sends the masked placeholder, retrieve the existing one from the DB
+    if url and all(c in "*•" for c in url):
+        db = get_db()
+        existing = await db.settings.find_one({"id": "system_config"})
+        if existing and existing.get("chatops_webhook_url"):
+            url = existing["chatops_webhook_url"]
+            
+    if not url:
+        return {"status": "error", "message": "Webhook URL is required."}
+        
+    try:
+        service = ChatOpsService(webhook_url=url, provider=data.chatops_provider or "auto")
+        # Send a generic test alert
+        if service.provider == "slack":
+            payload = {
+                "blocks": [
+                    {
+                        "type": "header",
+                        "text": {"type": "plain_text", "text": "🔔 Kubi AI ChatOps Test", "emoji": True}
+                    },
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": "This is a test notification confirming that your Slack integration is working beautifully! 🚀"}
+                    }
+                ]
+            }
+        elif service.provider == "teams":
+            payload = {
+                "@type": "MessageCard",
+                "@context": "http://schema.org/extensions",
+                "themeColor": "34D399",
+                "summary": "Kubi AI ChatOps Test",
+                "sections": [
+                    {
+                        "activityTitle": "🔔 Kubi AI ChatOps Test",
+                        "activitySubtitle": "This is a test notification confirming that your Microsoft Teams integration is working beautifully! 🚀"
+                    }
+                ]
+            }
+        else: # Discord
+            payload = {
+                "embeds": [
+                    {
+                        "title": "🔔 Kubi AI ChatOps Test",
+                        "color": 0x34D399,
+                        "description": "This is a test notification confirming that your Discord integration is working beautifully! 🚀",
+                        "footer": {"text": "🤖 Kubi AI Autonomous SRE"}
+                    }
+                ]
+            }
+            
+        await service._send(payload)
+        return {"status": "success", "message": "Test notification sent successfully."}
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to send test notification: {str(e)}"}
 
 @router.post("/incidents/ingest", response_model=IncidentIngestResponse, dependencies=[Depends(rate_limit(60))])
 @router.post("/v1/incidents/ingest", response_model=IncidentIngestResponse, dependencies=[Depends(rate_limit(60))])

@@ -63,7 +63,10 @@ export default function SettingsPage() {
     kubeconfig: '',
     gemini_api_key: '',
     gitlab_api_url: '',
-    gitlab_private_token: ''
+    gitlab_private_token: '',
+    chatops_enabled: false,
+    chatops_provider: 'slack',
+    chatops_webhook_url: ''
   });
 
   // Connection Test States
@@ -72,6 +75,9 @@ export default function SettingsPage() {
   
   const [testingGitLab, setTestingGitLab] = useState(false);
   const [gitlabTestResult, setGitlabTestResult] = useState<{ status: 'success' | 'error' | null; message: string }>({ status: null, message: '' });
+
+  const [testingChatOps, setTestingChatOps] = useState(false);
+  const [chatopsTestResult, setChatopsTestResult] = useState<{ status: 'success' | 'error' | null; message: string }>({ status: null, message: '' });
 
   // Mockup States (kept for UI completeness)
   const [emailNotifications, setEmailNotifications] = useState(true);
@@ -99,7 +105,10 @@ export default function SettingsPage() {
         kubeconfig: data.kubeconfig || '',
         gemini_api_key: data.gemini_api_key || '',
         gitlab_api_url: data.gitlab_api_url || '',
-        gitlab_private_token: data.gitlab_private_token || ''
+        gitlab_private_token: data.gitlab_private_token || '',
+        chatops_enabled: !!data.chatops_enabled,
+        chatops_provider: data.chatops_provider || 'slack',
+        chatops_webhook_url: data.chatops_webhook_url || ''
       });
     } catch (error) {
       console.error("Failed to fetch settings:", error);
@@ -134,6 +143,22 @@ export default function SettingsPage() {
       setGitlabTestResult({ status: 'error', message: error.message || 'Validation failed.' });
     } finally {
       setTestingGitLab(false);
+    }
+  };
+
+  const handleTestChatOps = async () => {
+    try {
+      setTestingChatOps(true);
+      setChatopsTestResult({ status: null, message: '' });
+      const res = await kubiApi.validateChatOps({
+        chatops_provider: settings.chatops_provider,
+        chatops_webhook_url: settings.chatops_webhook_url
+      });
+      setChatopsTestResult({ status: res.status === 'success' ? 'success' : 'error', message: res.message });
+    } catch (error: any) {
+      setChatopsTestResult({ status: 'error', message: error.message || 'Validation failed.' });
+    } finally {
+      setTestingChatOps(false);
     }
   };
 
@@ -274,36 +299,114 @@ export default function SettingsPage() {
                       Alert Channels
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Configure how you want to be notified of autonomous actions.
+                      Configure how you want to be notified of autonomous incident and remediation actions.
                     </Typography>
                   </Box>
                   
-                  {[
-                    { title: 'Email Alerts', icon: <Mail size={20} />, color: 'primary.main', state: emailNotifications, setState: setEmailNotifications, desc: 'Receive postmortem reports and critical alerts via email.' },
-                    { title: 'Slack Integration', icon: <Bell size={20} />, color: 'secondary.main', state: slackNotifications, setState: setSlackNotifications, desc: 'Real-time incident stream in your #ops channels.' }
-                  ].map((channel, idx) => (
-                    <Box key={idx} sx={{ p: 2, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                      <Stack direction="row" justifyContent="space-between" alignItems="center">
-                        <Stack direction="row" spacing={2} alignItems="center">
-                          <Box sx={{ width: 40, height: 40, borderRadius: 1.5, bgcolor: channel.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {channel.icon}
-                          </Box>
-                          <Box>
-                            <Typography variant="body1" color="white" fontWeight="medium">{channel.title}</Typography>
-                            <Typography variant="caption" color="text.secondary">{channel.desc}</Typography>
-                          </Box>
-                        </Stack>
-                        <Switch checked={channel.state} onChange={(e) => channel.setState(e.target.checked)} color="primary" />
+                  {/* Email Alerts Card */}
+                  <Box sx={{ p: 2.5, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Stack direction="row" spacing={2} alignItems="center">
+                        <Box sx={{ width: 42, height: 42, borderRadius: 2, bgcolor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)' }}>
+                          <Mail size={22} color="white" />
+                        </Box>
+                        <Box>
+                          <Typography variant="body1" color="white" fontWeight="semibold">Email Postmortems</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            Receive professional PDF postmortems and critical alerts via email.
+                          </Typography>
+                        </Box>
                       </Stack>
-                    </Box>
-                  ))}
+                      <Switch checked={emailNotifications} onChange={(e) => setEmailNotifications(e.target.checked)} color="primary" />
+                    </Stack>
+                  </Box>
+
+                  {/* ChatOps Webhook Alerts Card */}
+                  <Box sx={{ p: 2.5, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderLeft: settings.chatops_enabled ? '4px solid #10B981' : '1px solid rgba(255,255,255,0.05)' }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: settings.chatops_enabled ? 3 : 0 }}>
+                      <Stack direction="row" spacing={2} alignItems="center">
+                        <Box sx={{ width: 42, height: 42, borderRadius: 2, bgcolor: 'secondary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)' }}>
+                          <Webhook size={22} color="white" />
+                        </Box>
+                        <Box>
+                          <Typography variant="body1" color="white" fontWeight="semibold">ChatOps Webhooks</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            Stream real-time incident updates & autonomous actions to Slack, Teams, or Discord.
+                          </Typography>
+                        </Box>
+                      </Stack>
+                      <Switch 
+                        checked={settings.chatops_enabled} 
+                        onChange={(e) => setSettings({ ...settings, chatops_enabled: e.target.checked })} 
+                        color="success" 
+                      />
+                    </Stack>
+
+                    {settings.chatops_enabled && (
+                      <Box sx={{ mt: 2, pt: 3, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                        <Grid container spacing={3}>
+                          <Grid size={{ xs: 12, md: 4 }}>
+                            <FormControl fullWidth>
+                              <InputLabel id="chatops-provider-label" sx={{ color: 'text.secondary' }}>Platform Provider</InputLabel>
+                              <Select
+                                labelId="chatops-provider-label"
+                                value={settings.chatops_provider}
+                                label="Platform Provider"
+                                onChange={(e) => setSettings({ ...settings, chatops_provider: e.target.value })}
+                                sx={{ borderRadius: 2, bgcolor: 'rgba(0,0,0,0.2)', color: 'white' }}
+                              >
+                                <MenuItem value="slack">Slack</MenuItem>
+                                <MenuItem value="teams">Microsoft Teams</MenuItem>
+                                <MenuItem value="discord">Discord</MenuItem>
+                              </Select>
+                            </FormControl>
+                          </Grid>
+                          <Grid size={{ xs: 12, md: 8 }}>
+                            <TextField
+                              fullWidth
+                              label="Incoming Webhook URL"
+                              type="password"
+                              placeholder="https://hooks.slack.com/services/..."
+                              value={settings.chatops_webhook_url}
+                              onChange={(e) => setSettings({ ...settings, chatops_webhook_url: e.target.value })}
+                              variant="outlined"
+                              sx={{ 
+                                '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'rgba(0,0,0,0.2)' }
+                              }}
+                            />
+                          </Grid>
+
+                          <Grid size={12}>
+                            <Button
+                              variant="outlined"
+                              onClick={handleTestChatOps}
+                              disabled={testingChatOps || !settings.chatops_webhook_url}
+                              sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 'bold' }}
+                            >
+                              {testingChatOps ? <CircularProgress size={20} sx={{ mr: 1 }} /> : 'Send Test Notification'}
+                            </Button>
+                          </Grid>
+                        </Grid>
+
+                        {chatopsTestResult.status && (
+                          <Alert 
+                            severity={chatopsTestResult.status === 'success' ? 'success' : 'error'} 
+                            sx={{ mt: 2, borderRadius: 2 }}
+                          >
+                            {chatopsTestResult.message}
+                          </Alert>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
                   
-                  <Alert severity="info" sx={{ bgcolor: 'rgba(2, 136, 209, 0.1)', color: '#90caf9', border: '1px solid rgba(2, 136, 209, 0.2)', mt: 2 }}>
-                    Notification settings are currently stored locally. Enterprise SMTP/Slack config coming in v0.2.
+                  <Alert severity="info" sx={{ bgcolor: 'rgba(2, 136, 209, 0.1)', color: '#90caf9', border: '1px solid rgba(2, 136, 209, 0.2)', mt: 1 }}>
+                    All incident summaries and remediation reports sent to alert channels are fully sanitized for SRE and Snyk security compliance.
                   </Alert>
                 </Stack>
               </CardContent>
             </TabPanel>
+
 
             {/* AI & Automation */}
             <TabPanel value={tabValue} index={2}>

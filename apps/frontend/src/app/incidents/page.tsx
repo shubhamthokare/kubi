@@ -48,7 +48,7 @@ import {
   FormControl,
   Drawer,
 } from "@mui/material";
-import { kubiApi } from "@/lib/api";
+import { kubiApi, getWsUrl } from "@/lib/api";
 
 interface Incident {
   _id?: string;
@@ -187,6 +187,79 @@ export default function IncidentsPage() {
       setDrawerTab(0);
     }
   }, [selectedIncident]);
+
+  // Live Log Stream State
+  const [liveLogs, setLiveLogs] = useState<string[]>([]);
+  const [logConnectionStatus, setLogConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+
+  useEffect(() => {
+    if (drawerTab !== 1 || !selectedIncident) {
+      setLiveLogs([]);
+      setLogConnectionStatus('disconnected');
+      return;
+    }
+
+    let ws: WebSocket | null = null;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const pod = selectedIncident.pod?.name;
+    const namespace = selectedIncident.pod?.namespace || 'default';
+
+    if (!pod || !token) {
+      setLogConnectionStatus('error');
+      setLiveLogs(['[error] Missing pod metadata or access token.']);
+      return;
+    }
+
+    setLogConnectionStatus('connecting');
+    setLiveLogs(['[system] Initializing live SRE console log stream...']);
+
+    try {
+      const wsUrl = getWsUrl(`/ws/logs?pod=${pod}&namespace=${namespace}&token=${token}`);
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        setLogConnectionStatus('connected');
+        setLiveLogs(prev => [...prev, `[system] Connected to stream for pod ${pod}.`]);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'eof') {
+            setLiveLogs(prev => [...prev, `[system] Stream ended: ${data.message}`]);
+            setLogConnectionStatus('disconnected');
+          } else if (data.type === 'error') {
+            setLiveLogs(prev => [...prev, `[error] ${data.message}`]);
+            setLogConnectionStatus('error');
+          }
+        } catch {
+          // Plain text line
+          setLiveLogs(prev => [...prev, event.data]);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.error("WebSocket error:", err);
+        setLogConnectionStatus('error');
+        setLiveLogs(prev => [...prev, '[error] WebSocket connection failed or was interrupted.']);
+      };
+
+      ws.onclose = () => {
+        setLogConnectionStatus('disconnected');
+        setLiveLogs(prev => [...prev, '[system] Log stream session closed.']);
+      };
+
+    } catch (e: any) {
+      setLogConnectionStatus('error');
+      setLiveLogs(prev => [...prev, `[error] ${e.message || 'Failed to connect.'}`]);
+    }
+
+    return () => {
+      if (ws) {
+        ws.close();
+      }
+    };
+  }, [drawerTab, selectedIncident]);
 
   const fetchIncidents = async () => {
     try {
@@ -912,6 +985,7 @@ export default function IncidentsPage() {
                 }}
               >
                 <Tab label="Overview" icon={<Server size={16} />} iconPosition="start" />
+                <Tab label="Live Logs" icon={<Terminal size={16} />} iconPosition="start" />
                 <Tab label="AI Plan" icon={<Cpu size={16} />} iconPosition="start" />
                 <Tab label="Postmortem" icon={<FileText size={16} />} iconPosition="start" />
                 <Tab label="CI/CD" icon={<GitBranch size={16} />} iconPosition="start" />
@@ -1135,8 +1209,113 @@ export default function IncidentsPage() {
                 </Stack>
               )}
 
-              {/* Tab 1: AI Root Cause Analysis & Plan */}
+              {/* Tab 1: Live Logs Console Stream */}
               {drawerTab === 1 && (
+                <Stack spacing={3}>
+                  <Box>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        <Avatar
+                          sx={{
+                            width: 28,
+                            height: 28,
+                            bgcolor: "#0284c7",
+                            fontSize: "0.85rem",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          <Terminal size={14} />
+                        </Avatar>
+                        <Typography variant="subtitle1" sx={{ fontWeight: "bold", color: "white" }}>
+                          Live SRE Console Logs
+                        </Typography>
+                      </Stack>
+                      
+                      {/* Connection status badge */}
+                      <Chip
+                        label={
+                          logConnectionStatus === 'connected' ? 'LIVE' :
+                          logConnectionStatus === 'connecting' ? 'CONNECTING' :
+                          logConnectionStatus === 'error' ? 'ERROR' : 'OFFLINE'
+                        }
+                        size="small"
+                        sx={{
+                          fontWeight: 'bold',
+                          fontSize: '0.7rem',
+                          bgcolor:
+                            logConnectionStatus === 'connected' ? 'rgba(16, 185, 129, 0.1)' :
+                            logConnectionStatus === 'connecting' ? 'rgba(245, 158, 11, 0.1)' :
+                            logConnectionStatus === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255, 255, 255, 0.05)',
+                          color:
+                            logConnectionStatus === 'connected' ? '#10B981' :
+                            logConnectionStatus === 'connecting' ? '#F59E0B' :
+                            logConnectionStatus === 'error' ? '#EF4444' : '#94A3B8',
+                          border:
+                            logConnectionStatus === 'connected' ? '1px solid rgba(16, 185, 129, 0.2)' :
+                            logConnectionStatus === 'connecting' ? '1px solid rgba(245, 158, 11, 0.2)' :
+                            logConnectionStatus === 'error' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(255, 255, 255, 0.08)',
+                          '& .MuiChip-label': { px: 1.5 }
+                        }}
+                      />
+                    </Stack>
+
+                    <Box
+                      sx={{
+                        bgcolor: "#020617",
+                        border: "1px solid rgba(255, 255, 255, 0.08)",
+                        borderRadius: 3,
+                        p: 3,
+                        fontFamily: "monospace",
+                        fontSize: "0.8rem",
+                        color: "#38bdf8",
+                        overflowY: "auto",
+                        height: "55vh",
+                        boxShadow: "inset 0 4px 20px rgba(0, 0, 0, 0.9)",
+                        position: 'relative',
+                        "&::-webkit-scrollbar": { width: 6, height: 6 },
+                        "&::-webkit-scrollbar-thumb": {
+                          bgcolor: "rgba(255, 255, 255, 0.15)",
+                          borderRadius: 3,
+                        },
+                      }}
+                    >
+                      {liveLogs.map((line, index) => {
+                        let color = "#e2e8f0"; // default log color
+                        if (line.includes("[system]")) {
+                          color = "#10B981"; // success green
+                        } else if (line.includes("[error]") || line.includes("[stderr]")) {
+                          color = "#EF4444"; // error red
+                        } else if (line.includes("WARN") || line.includes("WARNING")) {
+                          color = "#F59E0B"; // warning amber
+                        }
+                        
+                        return (
+                          <div key={index} style={{ color, marginBottom: '6px', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
+                            {line}
+                          </div>
+                        );
+                      })}
+                      {logConnectionStatus === 'connected' && (
+                        <div style={{ display: 'flex', alignItems: 'center', color: '#10B981', marginTop: '12px', fontSize: '0.75rem' }}>
+                          <span style={{ 
+                            width: 6, 
+                            height: 6, 
+                            borderRadius: '50%', 
+                            backgroundColor: '#10B981', 
+                            display: 'inline-block',
+                            marginRight: 8,
+                            animation: 'pulse 1.5s infinite ease-in-out'
+                          }} />
+                          Streaming live console stdout...
+                        </div>
+                      )}
+                    </Box>
+                  </Box>
+                </Stack>
+              )}
+
+              {/* Tab 2: AI Root Cause Analysis & Plan */}
+              {drawerTab === 2 && (
                 <Stack spacing={3}>
                   <Box>
                     <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
@@ -1308,8 +1487,8 @@ export default function IncidentsPage() {
                 </Stack>
               )}
 
-              {/* Tab 2: Postmortem Report */}
-              {drawerTab === 2 && (
+              {/* Tab 3: Postmortem Report */}
+              {drawerTab === 3 && (
                 <Box>
                   {parsePostmortem(selectedIncident.postmortem) ? (
                     <Stack spacing={3}>
@@ -1427,8 +1606,8 @@ export default function IncidentsPage() {
                 </Box>
               )}
 
-              {/* Tab 3: GitLab Pipeline Integration */}
-              {drawerTab === 3 && (
+              {/* Tab 4: GitLab Pipeline Integration */}
+              {drawerTab === 4 && (
                 <Box>
                   <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 3 }}>
                     <GitBranch size={22} color="#f472b6" />
