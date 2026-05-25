@@ -47,7 +47,7 @@ class RemediationWorkflow:
             p["_id"] = str(p["_id"])
         return plans
 
-    async def approve_and_execute(self, plan_id: str) -> dict:
+    async def approve_and_execute(self, plan_id: str, rating: int = None, feedback: str = None) -> dict:
         """Approves a plan, executes its actions, verifies health, and updates MongoDB."""
         db = get_db()
         plan_entry = await db.plans.find_one({"plan_id": plan_id})
@@ -58,10 +58,23 @@ class RemediationWorkflow:
         if plan_entry["status"] != "pending_approval":
             return {"status": "error", "message": f"Plan cannot be executed. Current status: {plan_entry['status']}"}
             
-        await db.plans.update_one({"plan_id": plan_id}, {"$set": {"status": "executing"}})
+        update_fields = {"status": "executing"}
+        if rating is not None:
+            update_fields["rating"] = rating
+        if feedback is not None:
+            update_fields["feedback"] = feedback
+        await db.plans.update_one({"plan_id": plan_id}, {"$set": update_fields})
         
         # Resolve cluster's agent_url from the incident associated with this plan
         incident = await db.incidents.find_one({"plan_id": plan_id})
+        if incident:
+            incident_update = {}
+            if rating is not None:
+                incident_update["rating"] = rating
+            if feedback is not None:
+                incident_update["feedback"] = feedback
+            if incident_update:
+                await db.incidents.update_one({"plan_id": plan_id}, {"$set": incident_update})
         agent_url = None
         cluster_config = None
         if incident and incident.get("cluster_id"):
@@ -220,7 +233,7 @@ class RemediationWorkflow:
             "verified": verified
         }
 
-    async def reject_plan(self, plan_id: str) -> dict:
+    async def reject_plan(self, plan_id: str, rating: int = None, feedback: str = None) -> dict:
         """Rejects a plan and updates MongoDB."""
         db = get_db()
         plan_entry = await db.plans.find_one({"plan_id": plan_id})
@@ -228,5 +241,19 @@ class RemediationWorkflow:
         if not plan_entry:
             return {"status": "error", "message": "Plan not found."}
             
-        await db.plans.update_one({"plan_id": plan_id}, {"$set": {"status": "rejected"}})
+        update_fields = {"status": "rejected"}
+        if rating is not None:
+            update_fields["rating"] = rating
+        if feedback is not None:
+            update_fields["feedback"] = feedback
+        await db.plans.update_one({"plan_id": plan_id}, {"$set": update_fields})
+        
+        # Also update associated incident status if any
+        incident_update = {"status": "rejected"}
+        if rating is not None:
+            incident_update["rating"] = rating
+        if feedback is not None:
+            incident_update["feedback"] = feedback
+        await db.incidents.update_one({"plan_id": plan_id}, {"$set": incident_update})
+        
         return {"status": "rejected", "message": "Plan has been rejected and will not be executed."}

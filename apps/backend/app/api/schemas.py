@@ -164,6 +164,13 @@ class ReportListResponse(BaseModel):
     reports: List[Dict[str, Any]]
 
 # -------------------------------------------------------------
+# Feedback Models
+# -------------------------------------------------------------
+class FeedbackRequest(BaseModel):
+    rating: Optional[int] = None
+    feedback: Optional[str] = None
+
+# -------------------------------------------------------------
 # Validation Models
 # -------------------------------------------------------------
 class ValidateGeminiRequest(BaseModel):

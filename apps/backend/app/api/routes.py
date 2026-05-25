@@ -14,7 +14,7 @@ from app.api.schemas import (
     ValidateGitlabRequest, ValidateClusterRequest, ESValidateRequest,
     ValidationDetailResponse, SearchResponse, ESHealthResponse,
     ManualActionRequest, ManualRemediationRequest, ManualRemediationResponse,
-    ValidateChatopsRequest
+    ValidateChatopsRequest, FeedbackRequest
 )
 
 router = APIRouter()
@@ -94,19 +94,23 @@ async def trigger_scan(namespaces: Optional[List[str]] = Query(None), x_cluster_
     return result
 
 @router.post("/plans/{plan_id}/approve", response_model=PlanExecutionResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
-async def approve_plan(plan_id: str):
+async def approve_plan(plan_id: str, feedback_req: Optional[FeedbackRequest] = None):
     """
-    Approves a pending remediation plan and executes it.
+    Approves a pending remediation plan, saves optional rating/feedback, and executes it.
     """
-    result = await remediation_workflow.approve_and_execute(plan_id)
+    rating = feedback_req.rating if feedback_req else None
+    feedback = feedback_req.feedback if feedback_req else None
+    result = await remediation_workflow.approve_and_execute(plan_id, rating=rating, feedback=feedback)
     return result
 
 @router.post("/plans/{plan_id}/reject", response_model=StatusResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
-async def reject_plan(plan_id: str):
+async def reject_plan(plan_id: str, feedback_req: Optional[FeedbackRequest] = None):
     """
-    Rejects a pending remediation plan.
+    Rejects a pending remediation plan and saves optional rating/feedback.
     """
-    result = await remediation_workflow.reject_plan(plan_id)
+    rating = feedback_req.rating if feedback_req else None
+    feedback = feedback_req.feedback if feedback_req else None
+    result = await remediation_workflow.reject_plan(plan_id, rating=rating, feedback=feedback)
     return result
 
 @router.get("/health", response_model=HealthResponse, dependencies=[Depends(rate_limit(60))])
