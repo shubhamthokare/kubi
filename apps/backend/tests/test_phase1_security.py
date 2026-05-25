@@ -136,13 +136,13 @@ class TestPhase1Security(unittest.TestCase):
         response = client.get("/api/plans")
         self.assertEqual(response.status_code, 401)
         
-        read_only_token = create_access_token("readonly", ["sre:read"])
+        read_only_token = create_access_token(username="readonly", role="viewer", org="kubi-org", scopes=["sre:read"])
         headers = {"Authorization": f"Bearer {read_only_token}"}
         
         response = client.post("/api/scan", headers=headers)
         self.assertEqual(response.status_code, 403)
         
-        write_token = create_access_token("writer", ["sre:write"])
+        write_token = create_access_token(username="writer", role="sre-write", org="kubi-org", scopes=["sre:read", "sre:write"])
         headers_write = {"Authorization": f"Bearer {write_token}"}
         
         with patch('app.workflows.incident_detection.IncidentDetectionWorkflow.run_scan') as mock_run:
