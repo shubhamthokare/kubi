@@ -2,6 +2,11 @@
 
 Write-Host "Starting Kubi AI Deployment on Docker..." -ForegroundColor Cyan
 
+# Automatically configure Git to use shared .githooks folder
+if (Test-Path ".git") {
+    git config core.hooksPath .githooks 2>$null
+}
+
 # 1. Check if Docker daemon is running
 $dockerCheck = docker info 2>$null
 if ($null -eq $dockerCheck) {

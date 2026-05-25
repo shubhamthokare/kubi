@@ -2,6 +2,11 @@
 
 Write-Host "Starting Kubi AI Deployment on Minikube..." -ForegroundColor Cyan
 
+# Automatically configure Git to use shared .githooks folder
+if (Test-Path ".git") {
+    git config core.hooksPath .githooks 2>$null
+}
+
 # 1. Check if Minikube is running
 $minikubeStatus = minikube status --format='{{.Host}}' 2>$null
 if ($minikubeStatus -ne "Running") {

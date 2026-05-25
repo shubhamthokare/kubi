@@ -4,6 +4,11 @@
 
 echo "Starting Kubi AI Deployment on Minikube..."
 
+# Automatically configure Git to use shared .githooks folder
+if [ -d ".git" ]; then
+    git config core.hooksPath .githooks 2>/dev/null || true
+fi
+
 # 1. Check if Minikube is running
 if ! minikube status | grep -q "Running"; then
     echo "Minikube is not running. Please start it with 'minikube start'."

@@ -27,6 +27,9 @@ if [ ! -d ".git" ]; then
     git remote add origin https://gitlab.com/kubi-agent/kubi.git
 fi
 
+# Automatically configure Git to use shared .githooks folder
+git config core.hooksPath .githooks 2>/dev/null || true
+
 # Detect current active branch
 STARTING_BRANCH=$(git branch --show-current 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null)
 if [ -z "$STARTING_BRANCH" ]; then

@@ -19,6 +19,9 @@ if not exist .git (
     git remote add origin https://gitlab.com/kubi-agent/kubi.git
 )
 
+REM Automatically configure Git to use shared .githooks folder
+git config core.hooksPath .githooks >nul 2>&1
+
 REM Detect the current active branch
 set STARTING_BRANCH=
 for /f "tokens=*" %%i in ('git branch --show-current 2^>nul') do set STARTING_BRANCH=%%i

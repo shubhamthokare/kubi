@@ -11,6 +11,11 @@ NC='\033[0m'        # No Color
 
 echo -e "${INFO}Starting Kubi AI Deployment on Docker...${NC}"
 
+# Automatically configure Git to use shared .githooks folder
+if [ -d ".git" ]; then
+    git config core.hooksPath .githooks 2>/dev/null || true
+fi
+
 # 1. Check if Docker daemon is running
 if ! docker info >/dev/null 2>&1; then
     echo -e "${ERROR}Docker is not running. Please start the Docker daemon first.${NC}"
