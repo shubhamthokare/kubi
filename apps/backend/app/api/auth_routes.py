@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import RedirectResponse
 from app.core.config import settings
 from app.core.auth import create_access_token
-from app.core.security import rate_limit
+from app.core.security import rate_limit, get_current_user_with_scope
 from app.db.database import get_db
 from datetime import datetime
 from bson import ObjectId
@@ -428,3 +428,70 @@ async def dev_token(
         "scopes": scope_list,
         "mode": "development-cli"
     }
+
+
+@router.get("/linked-accounts", dependencies=[Depends(rate_limit(20))])
+async def get_linked_accounts(
+    payload: dict = Depends(get_current_user_with_scope("sre:read"))
+):
+    """Lists all linked SSO OAuth accounts for the authenticated user."""
+    db = get_db()
+    user = await db["users"].find_one({"email": payload["sub"]})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+        
+    oauth_list = await db["oauth_accounts"].find({"user_id": user["_id"]}).to_list(length=None)
+    
+    result = []
+    for oa in oauth_list:
+        result.append({
+            "provider": oa["provider"],
+            "email": oa.get("email", ""),
+            "created_at": oa.get("created_at")
+        })
+    return result
+
+
+@router.delete("/linked-accounts/{provider}", dependencies=[Depends(rate_limit(10))])
+async def unlink_account(
+    provider: str,
+    payload: dict = Depends(get_current_user_with_scope("sre:write"))
+):
+    """Unlinks a specific SSO OAuth provider.
+    
+    Ensures the user doesn't lock themselves out by verifying they either have a local password set, 
+    or have at least one other active linked account.
+    """
+    if provider not in ["google", "github", "gitlab"]:
+        raise HTTPException(status_code=400, detail="Invalid provider")
+        
+    db = get_db()
+    user = await db["users"].find_one({"email": payload["sub"]})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+        
+    # Check if the provider is actually linked
+    target_oauth = await db["oauth_accounts"].find_one({
+        "user_id": user["_id"],
+        "provider": provider
+    })
+    if not target_oauth:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"OAuth provider '{provider}' is not linked to this account."
+        )
+        
+    # Validate lockout protection
+    all_linked = await db["oauth_accounts"].find({"user_id": user["_id"]}).to_list(length=None)
+    has_local_password = user.get("hashed_password") is not None
+    
+    if not has_local_password and len(all_linked) <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot unlink the only authentication mechanism. Please configure a password or link another provider first."
+        )
+        
+    # Perform unlinking
+    await db["oauth_accounts"].delete_one({"_id": target_oauth["_id"]})
+    
+    return {"status": "success", "message": f"Successfully unlinked {provider} provider."}

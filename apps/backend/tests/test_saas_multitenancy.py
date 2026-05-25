@@ -281,5 +281,76 @@ class TestSaasMultitenancy(unittest.TestCase):
         self.assertIn("admin", decoded["scopes"])
         self.assertEqual(decoded["workspace_id"], str(ws_oid))
 
+    @patch('app.api.auth_routes.get_db')
+    def test_linked_accounts_api(self, mock_get_db):
+        client = TestClient(app)
+        
+        # Mock database collections
+        mock_db = MagicMock()
+        mock_users = MagicMock()
+        mock_oauth = MagicMock()
+        
+        mock_db.__getitem__.side_effect = lambda name: {
+            "users": mock_users,
+            "oauth_accounts": mock_oauth
+        }[name]
+        mock_get_db.return_value = mock_db
+        
+        user_oid = ObjectId()
+        
+        # User details (no password set initially)
+        mock_users.find_one = AsyncMock(return_value={
+            "_id": user_oid,
+            "email": "user@example.com",
+            "hashed_password": None
+        })
+        
+        # Generate token
+        token = create_access_token(username="user@example.com", role="admin", org="kubi-org", scopes=["sre:read", "sre:write", "admin"])
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        # 1. Test GET /api/auth/linked-accounts
+        mock_oauth.find = MagicMock()
+        mock_oauth.find.return_value.to_list = AsyncMock(return_value=[
+            {
+                "user_id": user_oid,
+                "provider": "github",
+                "email": "user@example.com",
+                "created_at": None
+            }
+        ])
+        
+        response = client.get("/api/auth/linked-accounts", headers=headers)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["provider"], "github")
+        self.assertEqual(data[0]["email"], "user@example.com")
+        
+        # 2. Test DELETE /api/auth/linked-accounts/{provider} - lockout protection fail
+        # There's only 1 linked account (github) and no password set -> should fail
+        mock_oauth.find_one = AsyncMock(return_value={
+            "_id": ObjectId(),
+            "user_id": user_oid,
+            "provider": "github"
+        })
+        
+        response_delete_fail = client.delete("/api/auth/linked-accounts/github", headers=headers)
+        self.assertEqual(response_delete_fail.status_code, 400)
+        self.assertIn("Cannot unlink the only authentication mechanism", response_delete_fail.json()["detail"])
+        
+        # 3. Test DELETE /api/auth/linked-accounts/{provider} - lockout protection success (multiple providers)
+        # Mock 2 linked oauth accounts
+        mock_oauth.find.return_value.to_list = AsyncMock(return_value=[
+            {"user_id": user_oid, "provider": "github"},
+            {"user_id": user_oid, "provider": "google"}
+        ])
+        mock_oauth.delete_one = AsyncMock(return_value=MagicMock())
+        
+        response_delete_success = client.delete("/api/auth/linked-accounts/github", headers=headers)
+        self.assertEqual(response_delete_success.status_code, 200)
+        self.assertEqual(response_delete_success.json()["status"], "success")
+        self.assertTrue(mock_oauth.delete_one.called)
+
 if __name__ == '__main__':
     unittest.main()
