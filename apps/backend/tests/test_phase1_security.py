@@ -99,16 +99,18 @@ class TestPhase1Security(unittest.TestCase):
 
     def test_dev_token_generation_endpoint(self):
         client = TestClient(app)
-        response = client.get("/api/auth/dev-token?username=test-user&scopes=sre:read,admin")
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data["username"], "test-user")
-        self.assertEqual(data["scopes"], ["sre:read", "admin"])
-        self.assertIn("access_token", data)
+        with patch('app.api.auth_routes.settings.ENVIRONMENT', 'development'):
+            response = client.get("/api/auth/dev-token?username=test-user&scopes=sre:read,admin")
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["username"], "test-user")
+            self.assertEqual(data["scopes"], ["sre:read", "admin"])
+            self.assertIn("access_token", data)
 
     def test_login_routes_fallback_redirection(self):
         client = TestClient(app)
-        with patch('app.api.auth_routes.settings.SSO_CLIENT_ID', ''):
+        with patch('app.api.auth_routes.settings.SSO_CLIENT_ID', ''), \
+             patch('app.api.auth_routes.settings.ENVIRONMENT', 'development'):
             response = client.get("/api/auth/login/google", follow_redirects=False)
             self.assertEqual(response.status_code, 307)
             self.assertIn("/auth/callback?code=mock_dev_code&state=google", response.headers["location"])
