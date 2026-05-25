@@ -214,3 +214,78 @@ class ESHealthResponse(BaseModel):
     documents: Optional[int] = None
     host: Optional[str] = None
     message: Optional[str] = None
+
+# -------------------------------------------------------------
+# User & Auth Models
+# -------------------------------------------------------------
+class User(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: Optional[str] = None
+    email: str
+    name: str
+    hashed_password: Optional[str] = None
+    is_email_verified: bool = False
+    created_at: Optional[str] = None
+
+class OAuthAccount(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: Optional[str] = None
+    user_id: str
+    provider: str
+    provider_account_id: str
+    email: str
+    created_at: Optional[str] = None
+
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+class OTPSendRequest(BaseModel):
+    email: str
+
+class OTPVerifyRequest(BaseModel):
+    email: str
+    code: str
+
+class OTPRecord(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    _id: Optional[str] = None
+    email: str
+    code: str
+    expires_at: int  # epoch seconds
+    created_at: int
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: Dict[str, Any]
+
+# -------------------------------------------------------------
+# Workspace Models
+# -------------------------------------------------------------
+class Workspace(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: Optional[str] = None
+    name: str
+    owner_id: str
+    created_at: Optional[str] = None
+
+class WorkspaceMember(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: Optional[str] = None
+    workspace_id: str
+    user_id: str
+    role: str # owner, admin, member, viewer
+    joined_at: Optional[str] = None
+
+class CreateWorkspaceRequest(BaseModel):
+    name: str
+
+class InviteMemberRequest(BaseModel):
+    email: str
+    role: str

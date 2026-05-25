@@ -55,7 +55,11 @@ class Settings(BaseSettings):
     # ── Legacy (kept for backward compat) ────────────────────────
     ELASTIC_MCP_URL: str = get_secret("ELASTIC_MCP_URL", "http://localhost:8000")
 
-    # ── SSO Auth / OIDC ──────────────────────────────────────────
+    # ── Email / OTP Settings ────────────────────────────────────────
+    RESEND_API_KEY: str = get_secret("RESEND_API_KEY", "")
+    EMAIL_FROM: str = get_secret("EMAIL_FROM", "no-reply@kubi.ai")
+    OTP_EXPIRY_MINUTES: int = int(get_secret("OTP_EXPIRY_MINUTES", "10"))
+
     JWT_SECRET_KEY: str = get_secret("JWT_SECRET_KEY", "kubi-sre-secret-key-change-me-in-production")
     SSO_CLIENT_ID: str = get_secret("SSO_CLIENT_ID", "")
     SSO_CLIENT_SECRET: str = get_secret("SSO_CLIENT_SECRET", "")

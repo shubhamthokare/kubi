@@ -8,6 +8,7 @@ resources:
 - be/
 - fe/
 - es/
+- kibana/
 images:
 - name: kubi-agent
   newName: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-agent

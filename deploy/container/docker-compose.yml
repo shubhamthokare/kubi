@@ -48,6 +48,7 @@ services:
       - kubi-network
 
   be:
+    image: kubi-backend:latest
     build:
       context: ../../apps/backend
       dockerfile: Dockerfile
@@ -73,6 +74,7 @@ services:
       - kubi-network
 
   agent:
+    image: kubi-agent:latest
     build:
       context: ../../apps/agent
       dockerfile: Dockerfile
@@ -100,6 +102,7 @@ services:
       - kubi-network
 
   fe:
+    image: kubi-frontend:latest
     build:
       context: ../../apps/frontend
       dockerfile: Dockerfile

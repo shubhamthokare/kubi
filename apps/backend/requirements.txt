@@ -23,3 +23,8 @@ pytest-asyncio>=0.21.0
 
 
 zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
+
+# Auth & Email
+passlib[bcrypt]>=1.7.4
+python-jose[cryptography]>=3.3.0
+resend>=2.1.0
