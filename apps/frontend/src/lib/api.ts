@@ -1,6 +1,20 @@
+const getBackendUrl = (): string => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  const isDev = process.env.NEXT_PUBLIC_ENVIRONMENT === 'development' || process.env.NODE_ENV === 'development';
+  const domain = isDev 
+    ? (process.env.NEXT_PUBLIC_LOCAL_DOMAIN || 'localhost') 
+    : (process.env.NEXT_PUBLIC_GLOBAL_DOMAIN || 'example.com');
+  const port = isDev ? ':8000' : '';
+  const protocol = isDev ? 'http:' : 'https:';
+  const sub = isDev ? '' : 'api.';
+  return `${protocol}//${sub}${domain}${port}/api`;
+};
+
 const BASE_URL = typeof window !== 'undefined'
   ? '/api'
-  : (process.env.BACKEND_URL ? `${process.env.BACKEND_URL}/api` : 'http://localhost:8000/api');
+  : (process.env.BACKEND_URL ? `${process.env.BACKEND_URL}/api` : getBackendUrl());
 
 export const api = {
   async get(endpoint: string) {

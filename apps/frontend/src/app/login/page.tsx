@@ -30,7 +30,7 @@ const GitlabIcon = ({ size = 18 }: { size?: number }) => (
 );
 
 export default function LoginPage() {
-  const [forceAccountSelection, setForceAccountSelection] = React.useState(false);
+  const [forceAccountSelection, setForceAccountSelection] = React.useState(true);
 
   const handleLogin = (provider: string) => {
     // Redirect browser directly to backend auth login endpoint

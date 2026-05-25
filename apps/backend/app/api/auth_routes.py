@@ -47,6 +47,10 @@ async def login(provider: str, prompt: Optional[str] = None):
     if provider not in ["google", "github", "gitlab"]:
         raise HTTPException(status_code=400, detail="Unsupported authentication provider")
 
+    # Default to select_account for Google to always force the Choose an Account dialog
+    if provider == "google" and not prompt:
+        prompt = "select_account"
+
     # If client ID or secret are missing, perform mock dev redirection ONLY in local development
     if not settings.SSO_CLIENT_ID or not settings.SSO_CLIENT_SECRET:
         if settings.ENVIRONMENT == "development":

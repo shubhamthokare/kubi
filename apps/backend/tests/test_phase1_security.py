@@ -171,5 +171,17 @@ class TestPhase1Security(unittest.TestCase):
             mock_time.return_value = 1002.5
             rate_limiter.check_rate_limit(ip, limit=3, window=2)
 
+    def test_google_login_defaults_to_select_account(self):
+        client = TestClient(app)
+        with patch('app.api.auth_routes.settings.SSO_CLIENT_ID', 'test_client_id'), \
+             patch('app.api.auth_routes.settings.SSO_CLIENT_SECRET', 'test_client_secret'), \
+             patch('app.api.auth_routes.settings.SSO_REDIRECT_URI', 'https://localhost/callback'), \
+             patch('app.api.auth_routes.settings.ENVIRONMENT', 'production'):
+            response = client.get("/api/auth/login/google", follow_redirects=False)
+            self.assertEqual(response.status_code, 307)
+            location = response.headers["location"]
+            self.assertIn("prompt=select_account", location)
+            self.assertIn("client_id=test_client_id", location)
+
 if __name__ == '__main__':
     unittest.main()
