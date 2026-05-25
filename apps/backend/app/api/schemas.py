@@ -130,6 +130,7 @@ class ClusterConfig(BaseModel):
     api_endpoint: Optional[str] = None
     kubeconfig: Optional[str] = None
     namespace: Optional[str] = None
+    org: Optional[str] = "kubi-org"
 
 class SettingsBase(BaseModel):
     model_config = ConfigDict(extra="ignore")

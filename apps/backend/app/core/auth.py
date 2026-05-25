@@ -53,9 +53,11 @@ def decode_jwt_token(token: str, secret_key: str) -> dict:
         
     return payload
 
-def create_access_token(username: str, scopes: list[str], expires_in: int = 3600) -> str:
+def create_access_token(username: str, role: str, org: str, scopes: list[str], expires_in: int = 3600) -> str:
     payload = {
         "sub": username,
+        "role": role,
+        "org": org,
         "scopes": scopes,
         "exp": int(time.time()) + expires_in,
         "iat": int(time.time())

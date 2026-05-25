@@ -41,10 +41,35 @@ const darkTheme = createTheme({
 
 function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const isAuthPage = pathname === '/login' || pathname?.startsWith('/auth/callback');
+  const [mounted, setMounted] = React.useState(false);
+  const [authorized, setAuthorized] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    if (token) {
+      setAuthorized(true);
+    } else if (!isAuthPage) {
+      setAuthorized(false);
+      router.push('/login');
+    }
+  }, [pathname, router, isAuthPage]);
+
+  // Block visual rendering during SSR/initial mount to prevent unauthenticated content leak
+  if (!mounted) {
+    return <Box sx={{ minHeight: '100vh', bgcolor: '#0f172a' }} />;
+  }
 
   if (isAuthPage) {
     return <>{children}</>;
+  }
+
+  if (!authorized) {
+    return (
+      <Box sx={{ minHeight: '100vh', bgcolor: '#0f172a', display: 'flex', justifyContent: 'center', alignItems: 'center' }} />
+    );
   }
 
   return (
@@ -63,18 +88,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const pathname = usePathname();
-  const router = useRouter();
-
-  React.useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    const isAuthPage = pathname === '/login' || pathname?.startsWith('/auth/callback');
-
-    if (!token && !isAuthPage) {
-      router.push('/login');
-    }
-  }, [pathname, router]);
-
   return (
     <html lang="en">
       <head>

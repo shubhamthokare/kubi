@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 class IncidentDetectionWorkflow:
     def __init__(self, agent_url: str = None, cluster_config: dict = None):
         self.k8s_service = KubernetesService(agent_url=agent_url, cluster_config=cluster_config)
+        self.cluster_config = cluster_config
         self.elastic_service = ElasticMCPService()
         self.gemini_service = GeminiService()
         self.remediation_workflow = RemediationWorkflow()
@@ -162,6 +163,7 @@ class IncidentDetectionWorkflow:
                         asyncio.create_task(self.remediation_workflow.approve_and_execute(plan_id))
             
             # Create or update incident in MongoDB
+            cluster_org = self.cluster_config.get("org", "kubi-org") if self.cluster_config else "kubi-org"
             await db.incidents.update_one(
                 {"id": pod_id, "status": "active"},
                 {
@@ -177,12 +179,14 @@ class IncidentDetectionWorkflow:
                         "ai_failed": plan_id is None,
                         "error_type": "API_KEY_BLOCKED" if plan_id is None and "API_KEY_SERVICE_BLOCKED" in rca_result else "GENERIC_FAILURE" if plan_id is None else None,
                         "cluster_id": cluster_id,
+                        "org": cluster_org,
                         "gitlab_pipeline": pipeline_status,
                         "loop_detected": loop_detected,
                         "requires_manual_approval": True if loop_detected else False
                     },
                     "$setOnInsert": {
                         "id": pod_id,
+                        "org": cluster_org,
                         "first_detected": datetime.now(timezone.utc).isoformat()
                     }
                 },
