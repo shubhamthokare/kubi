@@ -70,8 +70,32 @@ class Settings(BaseSettings):
     OTEL_RESOURCE_ATTRIBUTES: str = get_secret("OTEL_RESOURCE_ATTRIBUTES", "")
 
     # ── Domain Configuration ────────────────────────────────────────────────
-    DOMAIN_NAME: str = get_secret("DOMAIN_NAME", "example.com")
+    GLOBAL_DOMAIN: str = get_secret("GLOBAL_DOMAIN", "example.com")
+    LOCAL_DOMAIN: str = get_secret("LOCAL_DOMAIN", "localhost")
+    DOMAIN_NAME: str = get_secret("DOMAIN_NAME", "")
     SERVICE_SUBDOMAIN: str = get_secret("SERVICE_SUBDOMAIN", "api")
+
+    def __init__(self, **values):
+        super().__init__(**values)
+        # Compute dynamic DOMAIN_NAME if empty
+        if not self.DOMAIN_NAME:
+            self.DOMAIN_NAME = self.LOCAL_DOMAIN if self.ENVIRONMENT == "development" else self.GLOBAL_DOMAIN
+
+        # Resolve SSO_REDIRECT_URI dynamically based on domain variables
+        if not self.SSO_REDIRECT_URI or self.SSO_REDIRECT_URI == "http://localhost:8000/api/auth/callback":
+            if self.ENVIRONMENT == "development":
+                self.SSO_REDIRECT_URI = f"http://{self.LOCAL_DOMAIN}:8000/api/auth/callback"
+            else:
+                sub = f"{self.SERVICE_SUBDOMAIN}." if self.SERVICE_SUBDOMAIN else ""
+                self.SSO_REDIRECT_URI = f"https://{sub}{self.DOMAIN_NAME}/api/auth/callback"
+
+        # Resolve CORS_ORIGINS dynamically based on domain variables
+        if not self.CORS_ORIGINS or self.CORS_ORIGINS == "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:49262,http://192.168.49.2:30001":
+            if self.ENVIRONMENT == "development":
+                self.CORS_ORIGINS = f"http://{self.LOCAL_DOMAIN}:3000,http://{self.LOCAL_DOMAIN}:8000,http://127.0.0.1:3000,http://127.0.0.1:49262,http://192.168.49.2:30001"
+            else:
+                sub = f"{self.SERVICE_SUBDOMAIN}." if self.SERVICE_SUBDOMAIN else ""
+                self.CORS_ORIGINS = f"https://{self.DOMAIN_NAME},https://{sub}{self.DOMAIN_NAME}"
 
     class Config:
         env_file = ".env"
