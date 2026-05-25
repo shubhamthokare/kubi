@@ -5,6 +5,7 @@ from app.core.vault import get_secret
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "kubi AI"
+    ENVIRONMENT: str = get_secret("ENVIRONMENT", "production")
 
     # ── AI ──────────────────────────────────────────────────────
     GEMINI_API_KEY: str = get_secret("GEMINI_API_KEY", "")

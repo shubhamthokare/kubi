@@ -137,10 +137,13 @@ async def get_plan(plan_id: str):
         raise HTTPException(status_code=404, detail="Plan not found")
     return plan
 
-@router.get("/incidents", response_model=IncidentListResponse, dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))])
-async def get_incidents(x_cluster_id: Optional[str] = Header(None)):
+@router.get("/incidents", response_model=IncidentListResponse, dependencies=[Depends(rate_limit(60))])
+async def get_incidents(
+    x_cluster_id: Optional[str] = Header(None),
+    current_user: dict = Depends(get_current_user_with_scope("sre:read"))
+):
     """
-    List all detected incidents.
+    List all detected incidents, filtered strictly by user's organization scope.
     """
     from app.db.database import get_db
     db = get_db()
@@ -165,6 +168,16 @@ async def get_incidents(x_cluster_id: Optional[str] = Header(None)):
     query = {}
     if target_cluster_id:
         query["cluster_id"] = target_cluster_id
+        
+    # Enforce multi-tenant Organization separation:
+    # Users can only see incidents belonging to their organization, 
+    # unless they are a global administrator (role == "admin" and org == "kubi-org").
+    user_role = current_user.get("role", "viewer")
+    user_org = current_user.get("org", "kubi-org")
+    
+    if user_role != "admin" or user_org != "kubi-org":
+        query["org"] = user_org
+        
     incidents = await db.incidents.find(query).sort("_id", -1).to_list(length=None)
     for i in incidents:
         i["_id"] = str(i["_id"])
