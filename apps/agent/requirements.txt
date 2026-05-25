@@ -7,3 +7,4 @@ uvicorn==0.27.0
 arize-otel>=0.8.0
 opentelemetry-instrumentation-fastapi>=0.45b0
 opentelemetry-instrumentation-requests>=0.45b0
+httpx==0.26.0

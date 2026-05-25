@@ -3,24 +3,45 @@
 echo "=================================================="
 echo "🔍 [Git Hook] Pre-push verification active for all branches"
 echo "=================================================="
-echo "Running backend test suite..."
 
-# Navigate to the backend application folder from repo root
-# Git always executes hooks from the root of the repository, so pwd is root!
-
-# Check if pytest is available locally
+# Check if pytest and python are available locally
 if command -v pytest >/dev/null 2>&1; then
-    echo "🚀 Running tests locally using system pytest..."
+    echo "🚀 Running Backend tests locally using system pytest..."
     cd apps/backend
     PYTHONPATH=. pytest tests/ -v
-    TEST_STATUS=$?
+    BACKEND_STATUS=$?
     cd ../..
-# Check if docker is available to run tests in container
+    
+    echo "🚀 Running Agent tests locally using system python..."
+    cd apps/agent
+    PYTHONPATH=. python -m unittest discover -s tests -v
+    AGENT_STATUS=$?
+    cd ../..
+    
+    if [ $BACKEND_STATUS -eq 0 ] && [ $AGENT_STATUS -eq 0 ]; then
+        TEST_STATUS=0
+    else
+        TEST_STATUS=1
+    fi
+# Check if docker is available to run tests in containers
 elif command -v docker >/dev/null 2>&1; then
-    echo "🐳 Local pytest not found. Running tests inside cached Docker container..."
+    echo "🐳 Local pytest not found. Running tests inside cached Docker containers..."
+    
+    echo "Running Backend tests..."
     docker build -q -t kubi-backend-test ./apps/backend >/dev/null
     docker run --rm kubi-backend-test pytest tests/ -v
-    TEST_STATUS=$?
+    BACKEND_STATUS=$?
+    
+    echo "Running Agent tests..."
+    docker build -q -t kubi-agent-test ./apps/agent >/dev/null
+    docker run --rm kubi-agent-test python -m unittest discover -s tests -v
+    AGENT_STATUS=$?
+    
+    if [ $BACKEND_STATUS -eq 0 ] && [ $AGENT_STATUS -eq 0 ]; then
+        TEST_STATUS=0
+    else
+        TEST_STATUS=1
+    fi
 else
     echo "⚠️ WARNING: Neither pytest nor Docker was found. Cannot verify tests!"
     echo "Please install pytest locally or start Docker to verify builds."
