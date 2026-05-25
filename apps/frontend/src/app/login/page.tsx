@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Activity, KeyRound } from 'lucide-react';
-import { Box, Card, Stack, Typography, Button, Container, ThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import { Box, Card, Stack, Typography, Button, Container, ThemeProvider, createTheme, CssBaseline, FormControlLabel, Switch } from '@mui/material';
 
 // Custom high-fidelity brand SVGs as Lucide 1.x does not include brand logos anymore.
 const GithubIcon = ({ size = 18 }: { size?: number }) => (
@@ -30,9 +30,12 @@ const GitlabIcon = ({ size = 18 }: { size?: number }) => (
 );
 
 export default function LoginPage() {
+  const [forceAccountSelection, setForceAccountSelection] = React.useState(false);
+
   const handleLogin = (provider: string) => {
     // Redirect browser directly to backend auth login endpoint
-    window.location.href = `/api/auth/login/${provider}`;
+    const query = forceAccountSelection ? '?prompt=select_account' : '';
+    window.location.href = `/api/auth/login/${provider}${query}`;
   };
 
   return (
@@ -108,9 +111,27 @@ export default function LoginPage() {
           <Typography variant="h4" fontWeight="800" color="white" gutterBottom sx={{ letterSpacing: '-1px' }}>
             Kubi AI
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 4, px: 2 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3, px: 2 }}>
             AI-powered Kubernetes operations, diagnostic, and remediation platform.
           </Typography>
+
+          <Box sx={{ mb: 3.5, display: 'flex', justifyContent: 'center' }}>
+            <FormControlLabel
+              control={
+                <Switch 
+                  checked={forceAccountSelection} 
+                  onChange={(e) => setForceAccountSelection(e.target.checked)} 
+                  color="primary"
+                  size="small"
+                />
+              }
+              label={
+                <Typography variant="body2" color="text.secondary" sx={{ userSelect: 'none' }}>
+                  Force account selection
+                </Typography>
+              }
+            />
+          </Box>
 
           <Stack spacing={2} sx={{ width: '100%' }}>
             {/* Google Workspace */}

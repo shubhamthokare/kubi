@@ -39,7 +39,7 @@ def map_sso_user(username: str, email: str = "") -> tuple[str, str, list[str]]:
 
 
 @router.get("/login/{provider}", dependencies=[Depends(rate_limit(20))])
-async def login(provider: str):
+async def login(provider: str, prompt: Optional[str] = None):
     if provider not in ["google", "github", "gitlab"]:
         raise HTTPException(status_code=400, detail="Unsupported authentication provider")
 
@@ -47,6 +47,8 @@ async def login(provider: str):
     if not settings.SSO_CLIENT_ID or not settings.SSO_CLIENT_SECRET:
         if settings.ENVIRONMENT == "development":
             mock_callback_url = f"/auth/callback?code=mock_dev_code&state={provider}"
+            if prompt:
+                mock_callback_url += f"&prompt={prompt}"
             logger.info(f"OIDC credentials not set. Falling back to local dev redirect: {mock_callback_url}")
             return RedirectResponse(url=mock_callback_url)
         else:
@@ -73,6 +75,12 @@ async def login(provider: str):
         "scope": scope,
         "state": provider,
     }
+    
+    if prompt:
+        if provider == "github":
+            params["prompt"] = "login"  # Force credential re-entry on GitHub
+        else:
+            params["prompt"] = prompt  # Standard OIDC select_account / login / consent
     
     url = f"{auth_url}?{urllib.parse.urlencode(params)}"
     return RedirectResponse(url=url)
