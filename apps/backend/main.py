@@ -14,6 +14,8 @@ import asyncio
 from contextlib import asynccontextmanager
 from app.api.routes import router
 from app.api.auth_routes import router as auth_router
+from app.api.auth_routes_otp import router as auth_otp_router
+from app.api.workspace_routes import router as workspace_router
 from app.db.database import connect_to_mongo, close_mongo_connection
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
@@ -121,6 +123,8 @@ from app.api.ws_routes import ws_router
 
 app.include_router(router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+app.include_router(auth_otp_router, prefix="/api")
+app.include_router(workspace_router, prefix="/api")
 app.include_router(ws_router, prefix="/api")
 
 @app.get("/")

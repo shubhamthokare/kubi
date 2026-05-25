@@ -53,7 +53,7 @@ def decode_jwt_token(token: str, secret_key: str) -> dict:
         
     return payload
 
-def create_access_token(username: str, role: str, org: str, scopes: list[str], expires_in: int = 3600) -> str:
+def create_access_token(username: str, role: str, org: str, scopes: list[str], expires_in: int = 3600, workspace_id: str = None) -> str:
     payload = {
         "sub": username,
         "role": role,
@@ -62,6 +62,8 @@ def create_access_token(username: str, role: str, org: str, scopes: list[str], e
         "exp": int(time.time()) + expires_in,
         "iat": int(time.time())
     }
+    if workspace_id:
+        payload["workspace_id"] = workspace_id
     return create_jwt_token(payload, settings.JWT_SECRET_KEY)
 
 def verify_token_scopes(payload: dict, required_scope: str) -> bool:

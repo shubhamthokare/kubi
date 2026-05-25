@@ -3,6 +3,9 @@ from fastapi.responses import RedirectResponse
 from app.core.config import settings
 from app.core.auth import create_access_token
 from app.core.security import rate_limit
+from app.db.database import get_db
+from datetime import datetime
+from bson import ObjectId
 from typing import Optional
 import urllib.parse
 import requests
@@ -102,22 +105,120 @@ async def callback(code: str, state: str):
             )
             
         username = f"dev-sre-{provider}"
-        role, org, scopes = map_sso_user(username, f"dev-sre@{provider}.local")
-        token = create_access_token(username=username, role=role, org=org, scopes=scopes)
+        email = f"dev-sre@{provider}.local"
+        role, org, scopes = map_sso_user(username, email)
+        
+        # Look up or create the user in the database
+        db = get_db()
+        user_doc = await db["users"].find_one({"email": email})
+        if not user_doc:
+            user_doc = {
+                "email": email,
+                "name": username,
+                "hashed_password": None,
+                "is_email_verified": True,
+                "created_at": datetime.utcnow()
+            }
+            res = await db["users"].insert_one(user_doc)
+            user_doc["_id"] = res.inserted_id
+            
+            # Create default workspace
+            ws_doc = {
+                "name": f"{user_doc['name']}'s Workspace",
+                "owner_id": user_doc["_id"],
+                "created_at": datetime.utcnow()
+            }
+            ws_res = await db["workspaces"].insert_one(ws_doc)
+            ws_id = ws_res.inserted_id
+            
+            # Create workspace member entry
+            member_doc = {
+                "workspace_id": ws_id,
+                "user_id": user_doc["_id"],
+                "role": "owner",
+                "joined_at": datetime.utcnow()
+            }
+            await db["workspace_members"].insert_one(member_doc)
+            
+            # Create linked oauth account
+            oauth_doc = {
+                "user_id": user_doc["_id"],
+                "provider": provider,
+                "provider_account_id": username,
+                "email": email,
+                "created_at": datetime.utcnow()
+            }
+            await db["oauth_accounts"].insert_one(oauth_doc)
+            workspace_id = str(ws_id)
+            workspace_role = "owner"
+        else:
+            # Existing user - find or link oauth
+            oauth_doc = await db["oauth_accounts"].find_one({"user_id": user_doc["_id"], "provider": provider})
+            if not oauth_doc:
+                oauth_doc = {
+                    "user_id": user_doc["_id"],
+                    "provider": provider,
+                    "provider_account_id": username,
+                    "email": email,
+                    "created_at": datetime.utcnow()
+                }
+                await db["oauth_accounts"].insert_one(oauth_doc)
+            
+            # Load active/default workspace context
+            member_entry = await db["workspace_members"].find_one({"user_id": user_doc["_id"]})
+            if not member_entry:
+                ws_doc = {
+                    "name": f"{user_doc['name']}'s Workspace",
+                    "owner_id": user_doc["_id"],
+                    "created_at": datetime.utcnow()
+                }
+                ws_res = await db["workspaces"].insert_one(ws_doc)
+                ws_id = ws_res.inserted_id
+                member_doc = {
+                    "workspace_id": ws_id,
+                    "user_id": user_doc["_id"],
+                    "role": "owner",
+                    "joined_at": datetime.utcnow()
+                }
+                await db["workspace_members"].insert_one(member_doc)
+                workspace_id = str(ws_id)
+                workspace_role = "owner"
+            else:
+                workspace_id = str(member_entry["workspace_id"])
+                workspace_role = member_entry["role"]
+                
+        # Align scopes to the workspace role
+        if workspace_role in ["owner", "admin"]:
+            scopes = ["sre:read", "sre:write", "admin"]
+        elif workspace_role == "member":
+            scopes = ["sre:read", "sre:write"]
+        else: # viewer
+            scopes = ["sre:read"]
+
+        token = create_access_token(
+            username=username, 
+            role=workspace_role, 
+            org=org, 
+            scopes=scopes, 
+            workspace_id=workspace_id
+        )
         return {
             "access_token": token,
             "token_type": "bearer",
             "username": username,
-            "role": role,
+            "role": workspace_role,
             "org": org,
             "scopes": scopes,
             "provider": provider,
+            "workspace_id": workspace_id,
+            "workspace_role": workspace_role,
             "mode": "development-fallback"
         }
 
     # In production mode (when credentials are present), we perform actual code exchange
     try:
         email = ""
+        user_id_str = ""
         if provider == "google":
             token_url = "https://oauth2.googleapis.com/token"
             data = {
@@ -136,6 +237,7 @@ async def callback(code: str, state: str):
             userinfo = user_res.json()
             username = userinfo.get("email", "unknown-google-user")
             email = userinfo.get("email", "")
+            user_id_str = str(userinfo.get("sub", "unknown-google-id"))
         elif provider == "github":
             token_url = "https://github.com/login/oauth/access_token"
             headers = {"Accept": "application/json"}
@@ -154,6 +256,17 @@ async def callback(code: str, state: str):
             userinfo = user_res.json()
             username = userinfo.get("login", "unknown-github-user")
             email = userinfo.get("email", "")
+            user_id_str = str(userinfo.get("id", "unknown-github-id"))
+            
+            # Enforce verified primary email check for GitHub OIDC
+            if not email:
+                email_res = requests.get("https://api.github.com/user/emails", headers={"Authorization": f"Bearer {tokens['access_token']}"}, timeout=5)
+                if email_res.status_code == 200:
+                    emails_list = email_res.json()
+                    for e_entry in emails_list:
+                        if e_entry.get("primary") and e_entry.get("verified"):
+                            email = e_entry.get("email")
+                            break
         else: # gitlab
             gitlab_base = settings.GITLAB_API_URL.replace('/api/v4', '')
             token_url = f"{gitlab_base}/oauth/token"
@@ -173,17 +286,117 @@ async def callback(code: str, state: str):
             userinfo = user_res.json()
             username = userinfo.get("username", "unknown-gitlab-user")
             email = userinfo.get("email", "")
+            user_id_str = str(userinfo.get("id", "unknown-gitlab-id"))
+            
+        if not email:
+            raise HTTPException(status_code=400, detail="SSO provider did not return a verified email address.")
             
         role, org, scopes = map_sso_user(username, email)
-        token = create_access_token(username=username, role=role, org=org, scopes=scopes)
+        
+        # Database verification, creation, and account linking
+        db = get_db()
+        user_doc = await db["users"].find_one({"email": email})
+        if not user_doc:
+            user_doc = {
+                "email": email,
+                "name": username or email.split("@")[0],
+                "hashed_password": None,
+                "is_email_verified": True,
+                "created_at": datetime.utcnow()
+            }
+            res = await db["users"].insert_one(user_doc)
+            user_doc["_id"] = res.inserted_id
+            
+            # Create default workspace
+            ws_doc = {
+                "name": f"{user_doc['name']}'s Workspace",
+                "owner_id": user_doc["_id"],
+                "created_at": datetime.utcnow()
+            }
+            ws_res = await db["workspaces"].insert_one(ws_doc)
+            ws_id = ws_res.inserted_id
+            
+            # Create workspace member entry
+            member_doc = {
+                "workspace_id": ws_id,
+                "user_id": user_doc["_id"],
+                "role": "owner",
+                "joined_at": datetime.utcnow()
+            }
+            await db["workspace_members"].insert_one(member_doc)
+            
+            # Create linked oauth account
+            oauth_doc = {
+                "user_id": user_doc["_id"],
+                "provider": provider,
+                "provider_account_id": user_id_str,
+                "email": email,
+                "created_at": datetime.utcnow()
+            }
+            await db["oauth_accounts"].insert_one(oauth_doc)
+            workspace_id = str(ws_id)
+            workspace_role = "owner"
+        else:
+            # Existing user - find or link oauth
+            oauth_doc = await db["oauth_accounts"].find_one({"user_id": user_doc["_id"], "provider": provider})
+            if not oauth_doc:
+                oauth_doc = {
+                    "user_id": user_doc["_id"],
+                    "provider": provider,
+                    "provider_account_id": user_id_str,
+                    "email": email,
+                    "created_at": datetime.utcnow()
+                }
+                await db["oauth_accounts"].insert_one(oauth_doc)
+            
+            # Load active/default workspace context
+            member_entry = await db["workspace_members"].find_one({"user_id": user_doc["_id"]})
+            if not member_entry:
+                ws_doc = {
+                    "name": f"{user_doc['name']}'s Workspace",
+                    "owner_id": user_doc["_id"],
+                    "created_at": datetime.utcnow()
+                }
+                ws_res = await db["workspaces"].insert_one(ws_doc)
+                ws_id = ws_res.inserted_id
+                member_doc = {
+                    "workspace_id": ws_id,
+                    "user_id": user_doc["_id"],
+                    "role": "owner",
+                    "joined_at": datetime.utcnow()
+                }
+                await db["workspace_members"].insert_one(member_doc)
+                workspace_id = str(ws_id)
+                workspace_role = "owner"
+            else:
+                workspace_id = str(member_entry["workspace_id"])
+                workspace_role = member_entry["role"]
+                
+        # Align scopes to the workspace role
+        if workspace_role in ["owner", "admin"]:
+            scopes = ["sre:read", "sre:write", "admin"]
+        elif workspace_role == "member":
+            scopes = ["sre:read", "sre:write"]
+        else: # viewer
+            scopes = ["sre:read"]
+
+        token = create_access_token(
+            username=username, 
+            role=workspace_role, 
+            org=org, 
+            scopes=scopes, 
+            workspace_id=workspace_id
+        )
         return {
             "access_token": token,
             "token_type": "bearer",
             "username": username,
-            "role": role,
+            "role": workspace_role,
             "org": org,
             "scopes": scopes,
             "provider": provider,
+            "workspace_id": workspace_id,
+            "workspace_role": workspace_role,
             "mode": "production"
         }
     except Exception as e:
