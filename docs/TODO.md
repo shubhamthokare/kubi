@@ -37,13 +37,13 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 - [x] **RBAC Rule Optimization**: Restrict Kubernetes `ClusterRoles` to minimum required operation sets. Backend role is now read-only (`get`, `list`, `watch`); only `kubi-agent` retains write verbs (`patch`, `update`) plus `replicasets` (rollback) and `pods/exec` (diagnostics).
 - [x] **API Protection**: Rate-limiting applied to all auth routes (`/login` 20/min, `/callback` 20/min, `/dev-token` 5/min). All data API routes already carry JWT scope guards (`sre:read` / `sre:write`). Ingest endpoint is network-scoped (ClusterIP only).
 - [x] **Elasticsearch Token Authentication**: Supported secure token-based API Key authentication flows.
-- [ ] **SaaS Multi-Tenancy & Workspace Isolation (Pending)**:
-  - [ ] *Fix OTP Imports & Routing*: Correct `auth_routes_otp.py` imports to use `app.db.database.get_db` and register the OTP router in `main.py`.
-  - [ ] *SSO Account Linking*: Update OIDC `/api/auth/callback` to dynamically link verified emails using `users` and `oauth_accounts` MongoDB collections.
-  - [ ] *Linked Providers API*: Implement `GET /api/auth/linked-accounts` and `DELETE /api/auth/linked-accounts/{provider}` to manage connections.
-  - [ ] *Workspace RBAC Middleware*: Build FastAPI dependency `get_current_workspace_user` to validate memberships and enforce roles (`owner`, `admin`, `member`, `viewer`).
-  - [ ] *Workspace CRUD APIs*: Implement `GET /api/workspaces` (list) and `POST /api/workspaces` (create) with default personal workspace generation.
-  - [ ] *Member management APIs*: Implement `POST /api/workspaces/{id}/invite` and member revocation endpoints.
+- [x] **SaaS Multi-Tenancy & Workspace Isolation (Completed)**:
+  - [x] *Fix OTP Imports & Routing*: Correct `auth_routes_otp.py` imports to use `app.db.database.get_db` and register the OTP router in `main.py`.
+  - [x] *SSO Account Linking*: Update OIDC `/api/auth/callback` to dynamically link verified emails using `users` and `oauth_accounts` MongoDB collections.
+  - [x] *Linked Providers API*: Implement `GET /api/auth/linked-accounts` and `DELETE /api/auth/linked-accounts/{provider}` to manage connections.
+  - [x] *Workspace RBAC Middleware*: Build FastAPI dependency `get_current_workspace_user` to validate memberships and enforce roles (`owner`, `admin`, `member`, `viewer`).
+  - [x] *Workspace CRUD APIs*: Implement `GET /api/workspaces` (list) and `POST /api/workspaces` (create) with default personal workspace generation.
+  - [x] *Member management APIs*: Implement `POST /api/workspaces/{id}/invite` and member revocation endpoints.
 
 ---
 

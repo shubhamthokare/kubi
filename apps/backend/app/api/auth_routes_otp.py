@@ -8,10 +8,10 @@ from app.core.config import settings
 from app.core.security import rate_limit
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from .email import send_otp_email
-from .password import verify_password
+from app.core.email import send_otp_email
+from app.core.password import verify_password
 from app.core.auth import create_access_token
-from app.core.db import get_db
+from app.db.database import get_db
 import logging
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ class OTPVerifyRequest(BaseModel):
 async def send_otp(req: OTPRequest):
     code = _generate_code()
     await _store_otp(req.email, code)
-    success = await send_otp_email(to_email=req.email, otp=code)
+    success = send_otp_email(to_email=req.email, otp=code)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to send OTP email")
     return {"detail": "OTP sent"}
