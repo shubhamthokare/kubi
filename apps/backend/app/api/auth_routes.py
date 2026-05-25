@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse
 from app.core.config import settings
 from app.core.auth import create_access_token
 from app.core.security import rate_limit
+from typing import Optional
 import urllib.parse
 import requests
 import logging
