@@ -47,30 +47,30 @@ The production-grade deployment combines a push-based GitOps loop leveraging the
 ### GitOps Loop & Credential Hydration
 ```mermaid
 graph TD
-    subgraph GitLab Cloud
-        Dev[Developer Push] -->|1. Commit to main| GL[GitLab Repo: <GITLAB_REPO_PATH>]
-        GL -->|2. Trigger Pipeline| Runner[GitLab Runner]
+    subgraph GitLab_Cloud ["GitLab Cloud"]
+        Dev["Developer Push"] -->|1. Commit to main| GL["GitLab Repo: <GITLAB_REPO_PATH>"]
+        GL -->|2. Trigger Pipeline| Runner["GitLab Runner"]
         Runner -->|3. Build & Push Containers| GAR
     end
 
-    subgraph Google Cloud Platform (GCP)
-        GAR[(Google Artifact Registry)]
-        GSM[(Google Secret Manager)]
+    subgraph GCP_Platform ["Google Cloud Platform (GCP)"]
+        GAR[("Google Artifact Registry")]
+        GSM[("Google Secret Manager")]
     end
 
-    subgraph GKE Cluster (<GKE_CLUSTER_NAME>)
+    subgraph GKE_Cluster ["GKE Cluster (<GKE_CLUSTER_NAME>)"]
         direction TB
-        Agent[GitLab Agent: <GITLAB_AGENT_NAME>] <-->|Secure gRPC Tunnel| GL
+        Agent["GitLab Agent: <GITLAB_AGENT_NAME>"] ---|Secure gRPC Tunnel| GL
         Runner -->|4. Deploy via Tunnel context| Agent
-        Agent -->|5. Apply manifests| K8sApi[K8s API Server]
+        Agent -->|5. Apply manifests| K8sApi["K8s API Server"]
         
-        K8sApi -->|6. Trigger reconciliation| ESO[External Secrets Operator]
+        K8sApi -->|6. Trigger reconciliation| ESO["External Secrets Operator"]
         ESO -->|7. Authenticate via gcpsm-sa-key| GSM
         ESO -->|8. Fetch GEMINI_API_KEY & GITLAB_PRIVATE_TOKEN| GSM
-        ESO -->|9. Create Secret: kubi-secrets| KubiNS[kubi namespace]
+        ESO -->|9. Create Secret: kubi-secrets| KubiNS["kubi namespace"]
         
         KubiNS -->|10. Pull containers| GAR
-        KubiNS -->|11. Bind Secrets| Pods[Kubi Pods: backend, frontend, agent]
+        KubiNS -->|11. Bind Secrets| Pods["Kubi Pods: backend, frontend, agent"]
     end
 ```
 
