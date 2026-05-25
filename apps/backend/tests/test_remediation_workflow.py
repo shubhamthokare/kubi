@@ -35,6 +35,7 @@ class TestRemediationWorkflow(unittest.IsolatedAsyncioTestCase):
         mock_db = MagicMock()
         mock_db.plans.find_one = AsyncMock(return_value={"plan_id": "test-id"})
         mock_db.plans.update_one = AsyncMock()
+        mock_db.incidents.update_one = AsyncMock()
         mock_get_db.return_value = mock_db
         
         result = await self.workflow.reject_plan("test-id")

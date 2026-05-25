@@ -48,9 +48,9 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 ---
 
 ## 🧠 Phase 2: AI & RAG Intelligence
-- [ ] **Gemini Prompt Tuning**: Optimize system prompts to improve Root Cause Analysis (RCA) quality on dense pod logs.
-- [ ] **Multi-Model Orchestrations**: Allow fallback options to alternative reasoning models (e.g., Claude 3.5 Sonnet).
-- [ ] **SRE Feedback Loop**: Let human operators "rate" and leave suggestions on remediation plans to fine-tune future AI outputs.
+- [x] **Gemini Prompt Tuning**: Optimize system prompts to improve Root Cause Analysis (RCA) quality on dense pod logs.
+- [x] **Multi-Model Orchestrations**: Allow fallback options to alternative reasoning models (e.g., Claude 3.5 Sonnet).
+- [x] **SRE Feedback Loop**: Let human operators "rate" and leave suggestions on remediation plans to fine-tune future AI outputs.
 - [x] **Historic Context matching**: Enhance Elasticsearch RAG queries to auto-map recurring patterns.
 
 ---

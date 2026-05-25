@@ -189,9 +189,10 @@ class TestElasticsearchIntegration(unittest.IsolatedAsyncioTestCase):
         self.assertIn("2026-05-20T18:00:00Z", logs)
         mock_search.assert_called_once()
 
+    @patch('app.services.elasticsearch_service.Elasticsearch')
     @patch('app.services.elasticsearch_service.settings')
     @patch('app.services.elasticsearch_service.initialize_indices')
-    def test_get_es_api_key_auth(self, mock_init_indices, mock_settings):
+    def test_get_es_api_key_auth(self, mock_init_indices, mock_settings, mock_elasticsearch_class):
         # Reset the global cached client first
         from app.services.elasticsearch_service import reset_es_client, get_es
         reset_es_client()
@@ -203,13 +204,13 @@ class TestElasticsearchIntegration(unittest.IsolatedAsyncioTestCase):
         mock_settings.ELASTICSEARCH_PASSWORD = ""
         
         # Mock client ping response to true
-        mock_es.Elasticsearch.return_value.ping.return_value = True
+        mock_elasticsearch_class.return_value.ping.return_value = True
         
         # Call get_es which initializes the mock Elasticsearch client
         client = get_es()
         
         self.assertIsNotNone(client)
-        mock_es.Elasticsearch.assert_called_with(
+        mock_elasticsearch_class.assert_called_with(
             hosts=["http://mocked-es:9200"],
             request_timeout=30,
             retry_on_timeout=True,
