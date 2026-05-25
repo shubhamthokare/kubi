@@ -154,17 +154,22 @@ class TestPhase1Security(unittest.TestCase):
 
     def test_sliding_window_rate_limiter(self):
         ip = "192.168.1.50"
-        rate_limiter.check_rate_limit(ip, limit=3, window=2)
-        rate_limiter.check_rate_limit(ip, limit=3, window=2)
-        rate_limiter.check_rate_limit(ip, limit=3, window=2)
+        rate_limiter._requests[ip] = []
         
-        from fastapi import HTTPException
-        with self.assertRaises(HTTPException) as context:
+        with patch('time.time') as mock_time:
+            mock_time.return_value = 1000.0
             rate_limiter.check_rate_limit(ip, limit=3, window=2)
-        self.assertEqual(context.exception.status_code, 429)
-        
-        time.sleep(2.1)
-        rate_limiter.check_rate_limit(ip, limit=3, window=2)
+            rate_limiter.check_rate_limit(ip, limit=3, window=2)
+            rate_limiter.check_rate_limit(ip, limit=3, window=2)
+            
+            from fastapi import HTTPException
+            with self.assertRaises(HTTPException) as context:
+                rate_limiter.check_rate_limit(ip, limit=3, window=2)
+            self.assertEqual(context.exception.status_code, 429)
+            
+            # Advance time beyond the 2-second window deterministically
+            mock_time.return_value = 1002.5
+            rate_limiter.check_rate_limit(ip, limit=3, window=2)
 
 if __name__ == '__main__':
     unittest.main()
