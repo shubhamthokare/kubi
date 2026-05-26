@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base/
+  - ingress.yaml
+
+images:
+  - name: kubi-agent
+    newName: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-agent
+    newTag: main-a0aa7f8b
+  - name: kubi-backend
+    newName: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-backend
+    newTag: main-08568c57
+  - name: kubi-frontend
+    newName: asia-south1-docker.pkg.dev/stone-fortress-338918/kubi-repo/kubi-frontend
+    newTag: main-08568c57

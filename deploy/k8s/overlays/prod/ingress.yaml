@@ -1,0 +1,46 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kubi-prod-ingress
+  namespace: kubi
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  tls:
+  - hosts:
+    - kubi.kontactless.in
+    - backend.kubi.kontactless.in
+    - agent.kubi.kontactless.in
+    secretName: kubi-tls-secret
+  rules:
+  - host: kubi.kontactless.in
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: kubi-frontend-service
+            port:
+              number: 80
+  - host: backend.kubi.kontactless.in
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: kubi-backend-service
+            port:
+              number: 8000
+  - host: agent.kubi.kontactless.in
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: kubi-agent-service
+            port:
+              number: 8080

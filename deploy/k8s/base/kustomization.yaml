@@ -6,5 +6,11 @@ resources:
   - configmap.yaml
   - secrets/ClusterSecretStore.yaml
   - secrets/ExternalSecret.yaml
+  - ../agent/
+  - ../db/
+  - ../be/
+  - ../fe/
+  - ../es/
+  - ../kibana/
 
 
