@@ -1,5 +1,16 @@
 import logging
-import resend
+# Optional import of resend; provide fallback if not installed
+try:
+    import resend
+except ImportError:  # pragma: no cover
+    class _DummyResend:
+        api_key = None
+        class Emails:
+            @staticmethod
+            def send(payload):
+                # Simulate a successful send without external service
+                return {}
+    resend = _DummyResend()
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)

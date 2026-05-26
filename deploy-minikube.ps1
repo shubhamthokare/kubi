@@ -56,14 +56,14 @@ if ($Local) {
 Write-Host "Deployment Complete!" -ForegroundColor Cyan
 Write-Host "--------------------------------------------------"
 if ($Local) {
-    Write-Host "🌍 Local Domain Access (if hosts file is configured):" -ForegroundColor Green
+    Write-Host "[LOCAL] Local Domain Access (if hosts file is configured):" -ForegroundColor Green
     Write-Host "  Dashboard:   http://kubi.kontactless.in"
     Write-Host "  Backend API: http://backend.kubi.kontactless.in"
     Write-Host ""
-    Write-Host "🔌 Standard Minikube fallback to access Dashboard:" -ForegroundColor Green
+    Write-Host "[PORT] Standard Minikube fallback to access Dashboard:" -ForegroundColor Green
     Write-Host "  minikube service kubi-frontend-service -n kubi"
 } else {
-    Write-Host "🌍 Production Access:" -ForegroundColor Green
+    Write-Host "[PROD] Production Access:" -ForegroundColor Green
     Write-Host "  Dashboard:   https://kubi.kontactless.in"
     Write-Host "  Backend API: https://backend.kubi.kontactless.in"
 }

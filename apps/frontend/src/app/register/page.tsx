@@ -2,49 +2,68 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Activity, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Activity, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { Box, Card, Stack, Typography, Button, Container, TextField, Alert, CircularProgress, InputAdornment, IconButton } from '@mui/material';
 
-export default function LoginPage() {
+export default function RegisterPage() {
+  const [name, setName] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
   const [showPassword, setShowPassword] = React.useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
   const [error, setError] = React.useState('');
+  const [success, setSuccess] = React.useState('');
   const [loading, setLoading] = React.useState(false);
 
-  const handleCredentialLogin = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      setError('Please enter both email and password.');
+    setError('');
+    setSuccess('');
+
+    if (!name || !email || !password || !confirmPassword) {
+      setError('Please fill in all fields.');
       return;
     }
-    setError('');
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
     setLoading(true);
+    // Keep email for redirection before resetting state
+    const targetEmail = email;
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ name, email, password }),
       });
-      
-      const data = await res.json();
-      
+
       if (!res.ok) {
-        // If account is unverified, backend returns 403 with 'email_not_verified' detail
-        if (res.status === 403 && data.detail === 'email_not_verified') {
-          window.location.href = `/verify-email?email=${encodeURIComponent(email)}`;
-          return;
-        }
-        throw new Error(data.detail || 'Invalid email or password.');
+        const data = await res.json();
+        throw new Error(data.detail || 'Registration failed. Email may already be in use.');
       }
-      
-      localStorage.setItem('access_token', data.access_token);
-      if (data.workspace_id) {
-        localStorage.setItem('active_cluster_id', data.workspace_id);
-      }
-      window.location.href = '/dashboard';
+
+      setSuccess('Account created successfully! Redirecting to verification page...');
+      // Clear inputs
+      setName('');
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+
+      // Redirect to verification screen after 1.5 seconds
+      setTimeout(() => {
+        window.location.href = `/verify-email?email=${encodeURIComponent(targetEmail)}`;
+      }, 1500);
     } catch (err: any) {
-      setError(err.message || 'Authentication failed. Please try again.');
+      setError(err.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -72,7 +91,7 @@ export default function LoginPage() {
           borderRadius: '50%',
           background: 'rgba(96, 165, 250, 0.1)',
           filter: 'blur(80px)',
-          top: '20%',
+          top: '15%',
           left: '10%',
         }}
       />
@@ -84,12 +103,12 @@ export default function LoginPage() {
           borderRadius: '50%',
           background: 'rgba(167, 139, 250, 0.1)',
           filter: 'blur(80px)',
-          bottom: '20%',
+          bottom: '15%',
           right: '10%',
         }}
       />
 
-      <Container maxWidth="xs" sx={{ zIndex: 1 }}>
+      <Container maxWidth="xs" sx={{ zIndex: 1, py: 4 }}>
         <Card
           sx={{
             p: 4.5,
@@ -121,21 +140,59 @@ export default function LoginPage() {
           </Box>
 
           <Typography variant="h4" fontWeight="800" color="white" gutterBottom sx={{ letterSpacing: '-1px' }}>
-            Kubi AI
+            Create SRE Account
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3, px: 2 }}>
-            AI-powered Kubernetes operations, diagnostic, and remediation platform.
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3.5, px: 2 }}>
+            Register to provision your automated Kubernetes diagnostic environment.
           </Typography>
 
-          {/* Credentials Login Form */}
-          <Box component="form" onSubmit={handleCredentialLogin} sx={{ mt: 3, textAlign: 'left' }}>
+          <Box component="form" onSubmit={handleRegister} sx={{ textAlign: 'left' }}>
             {error && (
-              <Alert severity="error" sx={{ mb: 2, bgcolor: 'rgba(239, 68, 68, 0.1)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+              <Alert severity="error" sx={{ mb: 2.5, bgcolor: 'rgba(239, 68, 68, 0.1)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
                 {error}
+              </Alert>
+            )}
+
+            {success && (
+              <Alert severity="success" sx={{ mb: 2.5, bgcolor: 'rgba(16, 185, 129, 0.1)', color: '#a7f3d0', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                {success}
               </Alert>
             )}
             
             <Stack spacing={2.5}>
+              <TextField
+                fullWidth
+                label="Full Name"
+                variant="outlined"
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start" sx={{ color: 'rgba(255,255,255,0.4)', mr: 1 }}>
+                        <User size={18} />
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    color: 'white',
+                    bgcolor: 'rgba(15, 23, 42, 0.3)',
+                    borderRadius: 2.5,
+                    '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.1)' },
+                    '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.2)' },
+                    '&.Mui-focused fieldset': { borderColor: '#60a5fa' },
+                  },
+                  '& .MuiInputLabel-root': {
+                    color: 'rgba(255, 255, 255, 0.4)',
+                    '&.Mui-focused': { color: '#60a5fa' },
+                  },
+                }}
+              />
+
               <TextField
                 fullWidth
                 label="Email Address"
@@ -209,11 +266,51 @@ export default function LoginPage() {
                 }}
               />
 
+              <TextField
+                fullWidth
+                label="Confirm Password"
+                variant="outlined"
+                type={showConfirmPassword ? 'text' : 'password'}
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start" sx={{ color: 'rgba(255,255,255,0.4)', mr: 1 }}>
+                        <Lock size={18} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton onClick={() => setShowConfirmPassword(!showConfirmPassword)} edge="end" sx={{ color: 'rgba(255,255,255,0.4)' }}>
+                          {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    color: 'white',
+                    bgcolor: 'rgba(15, 23, 42, 0.3)',
+                    borderRadius: 2.5,
+                    '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.1)' },
+                    '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.2)' },
+                    '&.Mui-focused fieldset': { borderColor: '#60a5fa' },
+                  },
+                  '& .MuiInputLabel-root': {
+                    color: 'rgba(255, 255, 255, 0.4)',
+                    '&.Mui-focused': { color: '#60a5fa' },
+                  },
+                }}
+              />
+
               <Button
                 type="submit"
                 variant="contained"
                 fullWidth
-                disabled={loading}
+                disabled={loading || success !== ''}
                 sx={{
                   py: 1.5,
                   borderRadius: 2.5,
@@ -229,16 +326,16 @@ export default function LoginPage() {
                   },
                 }}
               >
-                {loading ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Sign In'}
+                {loading ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Sign Up'}
               </Button>
             </Stack>
           </Box>
 
           <Box sx={{ mt: 4 }}>
             <Typography variant="body2" color="text.secondary">
-              Don't have an SRE account?{' '}
-              <Link href="/register" style={{ color: '#60a5fa', textDecoration: 'none', fontWeight: 600 }}>
-                Sign Up
+              Already have an account?{' '}
+              <Link href="/login" style={{ color: '#60a5fa', textDecoration: 'none', fontWeight: 600 }}>
+                Sign In
               </Link>
             </Typography>
           </Box>
