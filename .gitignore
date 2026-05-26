@@ -171,6 +171,7 @@ deploy/k8s/overlays/**/secrets/*.yaml
 !deploy/k8s/base/secrets/ClusterSecretStore.yaml
 !deploy/k8s/base/secrets/ExternalSecret.yaml
 
+deploy/k8s/secrets/
 # Deployment (Helm & Kubernetes)
 helm/*.tgz
 helm/charts/
