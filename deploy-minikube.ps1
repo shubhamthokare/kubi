@@ -38,13 +38,9 @@ if ($Local) {
     Write-Host "Building Agent Image..." -ForegroundColor Green
     minikube image build -t kubi-agent:latest ./apps/agent
 
-    # 4. Apply Manifests with Local Images
-    Write-Host "Applying Kubernetes Manifests with local images..." -ForegroundColor Blue
-    $manifests = kubectl kustomize deploy/k8s/
-    $manifests = $manifests -replace 'image:\s*\S*kubi-backend:\S*', 'image: kubi-backend:latest'
-    $manifests = $manifests -replace 'image:\s*\S*kubi-frontend:\S*', 'image: kubi-frontend:latest'
-    $manifests = $manifests -replace 'image:\s*\S*kubi-agent:\S*', 'image: kubi-agent:latest'
-    $manifests | kubectl apply -f -
+    # 4. Apply Manifests with Local Overlay
+    Write-Host "Applying Kubernetes Manifests using Local Kustomize overlay..." -ForegroundColor Blue
+    kubectl apply -k deploy/k8s/overlays/local/
 
     # 5. Force Restart (Ensure latest images are used)
     Write-Host "Restarting Deployments to pick up new images..." -ForegroundColor Yellow
@@ -53,14 +49,24 @@ if ($Local) {
     kubectl rollout restart deployment kubi-agent -n kubi
 } else {
     # 4. Apply Standard/Global Manifests
-    Write-Host "Applying Kubernetes Manifests with global registry images..." -ForegroundColor Blue
-    kubectl apply -k deploy/k8s/
+    Write-Host "Applying Kubernetes Manifests using Production Kustomize overlay..." -ForegroundColor Blue
+    kubectl apply -k deploy/k8s/overlays/prod/
 }
 
 Write-Host "Deployment Complete!" -ForegroundColor Cyan
 Write-Host "--------------------------------------------------"
-Write-Host "To access the Kubi Frontend dashboard, run:" -ForegroundColor Green
-Write-Host "  minikube service kubi-frontend-service -n kubi"
+if ($Local) {
+    Write-Host "🌍 Local Domain Access (if hosts file is configured):" -ForegroundColor Green
+    Write-Host "  Dashboard:   http://kubi.kontactless.in"
+    Write-Host "  Backend API: http://backend.kubi.kontactless.in"
+    Write-Host ""
+    Write-Host "🔌 Standard Minikube fallback to access Dashboard:" -ForegroundColor Green
+    Write-Host "  minikube service kubi-frontend-service -n kubi"
+} else {
+    Write-Host "🌍 Production Access:" -ForegroundColor Green
+    Write-Host "  Dashboard:   https://kubi.kontactless.in"
+    Write-Host "  Backend API: https://backend.kubi.kontactless.in"
+}
 Write-Host ""
 Write-Host "To access the Kibana UI, run:" -ForegroundColor Cyan
 Write-Host "  kubectl port-forward svc/kibana-service -n kubi 5601:5601"
