@@ -400,6 +400,46 @@ pip install -r requirements.txt
 
 ---
 
+## 🛡️ GitGuardian Pre-push Security Hook
+
+To protect our cloud environments and prevent accidental leaks of sensitive credentials (such as Google Gemini, MongoDB, or Arize API keys), the repository is equipped with a GitGuardian (`ggshield`) pre-push verification hook.
+
+### ⚙️ Setup and Registration
+
+The repository utilizes a centralized hooks path configured via `.githooks/`. To set up the pre-push hook locally on your system:
+
+1. **Install and Register**:
+   Run the helper installation script to download `ggshield` and install the hooks:
+   ```bash
+   chmod +x scripts/setup_gitguardian.sh
+   ./scripts/setup_gitguardian.sh
+   ```
+
+2. **Authenticate with GitGuardian**:
+   Before running a push, ensure your GitGuardian API key is available in your shell session. GitGuardian scans your commits automatically before allowing them to reach the remote:
+   - **Windows (PowerShell)**:
+     ```powershell
+     $env:GITGUARDIAN_API_KEY="your_gitguardian_api_token"
+     ```
+   - **macOS / Linux (Bash)**:
+     ```bash
+     export GITGUARDIAN_API_KEY="your_gitguardian_api_token"
+     ```
+
+### ⏭️ Bypassing Slow Test Verification Suite
+
+The pre-push hook also acts as a quality gate, running automated test suites inside cached Docker containers before completing the push. If your local Docker setup is resource-constrained or you wish to bypass this check during quick development iterations, set `SKIP_TESTS=1`:
+- **Windows (PowerShell)**:
+  ```powershell
+  $env:SKIP_TESTS="1"
+  ```
+- **macOS / Linux (Bash)**:
+  ```bash
+  export SKIP_TESTS="1"
+  ```
+
+---
+
 ## 📚 Next Steps
 
 After setting up locally:
@@ -411,5 +451,5 @@ After setting up locally:
 
 ---
 
-*Last Updated: May 20, 2026*  
+*Last Updated: May 26, 2026*  
 *Kubi AI Local Development Guide*
