@@ -4,6 +4,38 @@ echo "=================================================="
 echo "🔍 [Git Hook] Pre-push verification active for all branches"
 echo "=================================================="
 
+# --- GitGuardian secrets check ---
+if command -v ggshield >/dev/null 2>&1; then
+  echo "🛡️  Running GitGuardian secrets scan..."
+  ggshield secret scan . --no-color
+  RESULT=$?
+  if [ $RESULT -ne 0 ]; then
+    echo -e "\n\033[0;31m✖️  GitGuardian detected potential secrets. Push aborted.\033[0m"
+    exit 1
+  fi
+  echo "✅ No secrets detected."
+elif [ -f "C:/Users/shubh/AppData/Roaming/Python/Python314/Scripts/ggshield.exe" ]; then
+  echo "🛡️  Running GitGuardian secrets scan..."
+  "C:/Users/shubh/AppData/Roaming/Python/Python314/Scripts/ggshield.exe" secret scan . --no-color
+  RESULT=$?
+  if [ $RESULT -ne 0 ]; then
+    echo -e "\n\033[0;31m✖️  GitGuardian detected potential secrets. Push aborted.\033[0m"
+    exit 1
+  fi
+  echo "✅ No secrets detected."
+else
+  echo "⚠️  WARNING: ggshield not found. Skipping secrets scan."
+fi
+
+# --- Branch restriction check ---
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$CURRENT_BRANCH" != "main" ]; then
+  echo -e "\n\033[0;31m⚠️  Pre-push hook only allows pushes to the 'main' branch. Current branch: $CURRENT_BRANCH\033[0m"
+  exit 1
+fi
+echo "✅ Push is targetting allowed branch: $CURRENT_BRANCH"
+echo "=================================================="
+
 # Check if pytest and python are available locally
 if command -v pytest >/dev/null 2>&1; then
     echo "🚀 Running Backend tests locally using system pytest..."
