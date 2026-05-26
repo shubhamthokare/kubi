@@ -7,7 +7,7 @@ echo "=================================================="
 # --- GitGuardian secrets check ---
 if command -v ggshield >/dev/null 2>&1; then
   echo "🛡️  Running GitGuardian secrets scan..."
-  ggshield secret scan path .
+  ggshield secret scan path --recursive .
   RESULT=$?
   if [ $RESULT -ne 0 ]; then
     echo -e "\n\033[0;31m✖️  GitGuardian detected potential secrets. Push aborted.\033[0m"
@@ -16,7 +16,7 @@ if command -v ggshield >/dev/null 2>&1; then
   echo "✅ No secrets detected."
 elif [ -f "C:/Users/shubh/AppData/Roaming/Python/Python314/Scripts/ggshield.exe" ]; then
   echo "🛡️  Running GitGuardian secrets scan..."
-  "C:/Users/shubh/AppData/Roaming/Python/Python314/Scripts/ggshield.exe" secret scan path .
+  "C:/Users/shubh/AppData/Roaming/Python/Python314/Scripts/ggshield.exe" secret scan path --recursive .
   RESULT=$?
   if [ $RESULT -ne 0 ]; then
     echo -e "\n\033[0;31m✖️  GitGuardian detected potential secrets. Push aborted.\033[0m"
