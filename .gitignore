@@ -202,3 +202,6 @@ secret-*.json
 *.password
 *.pwd
 deploy/k8s/secrets/
+
+# Added by ggshield
+.cache_ggshield
