@@ -201,3 +201,4 @@ secret-*.json
 *.password
 *.pwd
 
+deploy/k8s/secrets/
