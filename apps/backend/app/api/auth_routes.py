@@ -13,6 +13,18 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+@router.get("/login/google")
+async def google_login():
+    google_auth_url = (
+        "https://accounts.google.com/o/oauth2/v2/auth"
+        "?client_id=YOUR_CLIENT_ID"
+        "&redirect_uri=http://localhost:8000/api/auth/callback/google"
+        "&response_type=code"
+        "&scope=openid email profile"
+    )
+    return RedirectResponse(url=google_auth_url)
+
+
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 def map_sso_user(username: str, email: str = "") -> tuple[str, str, list[str]]:

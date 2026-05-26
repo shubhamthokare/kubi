@@ -8,11 +8,11 @@ data:
   MONGODB_URL: "mongodb://mongodb-service:27017"
   DATABASE_NAME: "kubi"
   # Service URLs (in-cluster DNS)
-  BACKEND_URL: "http://kubi-backend-service:8000"
-  AGENT_URL: "http://kubi-agent-service:8080"
-  FRONTEND_URL: "http://kubi-frontend-service:80"
-  DOMAIN: "8.231.96.95"
-  DOMAIN_NAME: "8.231.96.95"
+  BACKEND_URL: "https://backend.kubi.kontactless.in"
+  AGENT_URL: "https://agent.kubi.kontactless.in"
+  FRONTEND_URL: "https://kubi.kontactless.in"
+  DOMAIN: "kubi.kontactless.in"
+  DOMAIN_NAME: "kubi.kontactless.in"
   # Elasticsearch (in-cluster, security disabled for dev)
   ELASTICSEARCH_HOST: "http://elasticsearch-service:9200"
   ELASTICSEARCH_INDEX: "kubi-incidents"

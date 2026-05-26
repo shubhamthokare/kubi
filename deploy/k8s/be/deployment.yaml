@@ -54,6 +54,16 @@ spec:
               optional: true
         - name: ARIZE_PROJECT_NAME
           value: "kubi-prod-backend"
+        - name: SSO_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: kubi-secrets
+              key: SSO_CLIENT_ID
+        - name: SSO_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: kubi-secrets
+              key: SSO_CLIENT_SECRET
         # ── Config values from ConfigMap ──────────────────────────
         - name: MONGODB_URL
           valueFrom:

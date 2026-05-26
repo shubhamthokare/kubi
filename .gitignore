@@ -166,11 +166,11 @@ kubeconfig*
 secrets.dev.yaml
 deploy/k8s/base/secrets/*.yaml
 deploy/k8s/overlays/**/secrets/*.yaml
+deploy/k8s/secrets/*
 
 # Allow public structural secrets manifests
 !deploy/k8s/base/secrets/ClusterSecretStore.yaml
 !deploy/k8s/base/secrets/ExternalSecret.yaml
-
 # Deployment (Helm & Kubernetes)
 helm/*.tgz
 helm/charts/
@@ -201,3 +201,6 @@ secret-*.json
 *.password
 *.pwd
 
+deploy/k8s/secrets/kubi-secrets.yaml
+deploy/k8s/secrets/kubi-secrets.yaml
+deploy/k8s/secrets/kubi-secrets.yaml
