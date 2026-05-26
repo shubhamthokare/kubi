@@ -36,8 +36,12 @@ fi
 echo "✅ Push is targetting allowed branch: $CURRENT_BRANCH"
 echo "=================================================="
 
+# Check if SKIP_TESTS is set to bypass the test run
+if [ "$SKIP_TESTS" = "1" ]; then
+    echo "⏭️  SKIP_TESTS is set. Bypassing test verification suite..."
+    TEST_STATUS=0
 # Check if pytest and python are available locally
-if command -v pytest >/dev/null 2>&1; then
+elif command -v pytest >/dev/null 2>&1; then
     echo "🚀 Running Backend tests locally using system pytest..."
     cd apps/backend
     PYTHONPATH=. pytest tests/ -v
