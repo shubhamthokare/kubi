@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubi-config
+  namespace: kubi
+data:
+  BACKEND_URL: "http://backend.kubi.kontactless.in"
+  AGENT_URL: "http://kubi-agent-service:8080"
+  FRONTEND_URL: "http://kubi.kontactless.in"

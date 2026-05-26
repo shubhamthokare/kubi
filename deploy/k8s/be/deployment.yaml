@@ -22,20 +22,30 @@ spec:
         - containerPort: 8000
         env:
         # ── Secrets ──────────────────────────────────────────────
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: kubi-all-secrets
+              key: DB_PASSWORD
+        - name: RESEND_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kubi-all-secrets
+              key: RESEND_API_KEY
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kubi-all-secrets
+              key: JWT_SECRET_KEY
         - name: GEMINI_API_KEY
           valueFrom:
             secretKeyRef:
-              name: kubi-secrets
+              name: kubi-all-secrets
               key: GEMINI_API_KEY
-        - name: GITLAB_PRIVATE_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: kubi-secrets
-              key: GITLAB_TOKEN
         - name: GITLAB_TOKEN
           valueFrom:
             secretKeyRef:
-              name: kubi-secrets
+              name: kubi-all-secrets
               key: GITLAB_TOKEN
         # ── Arize Tracing ─────────────────────────────────────────
         - name: ENVIRONMENT
