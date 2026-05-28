@@ -209,6 +209,12 @@ export default function LoginPage() {
                 }}
               />
 
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: -1.5 }}>
+                <Link href="/forgot-password" style={{ color: '#60a5fa', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 500 }}>
+                  Forgot Password?
+                </Link>
+              </Box>
+
               <Button
                 type="submit"
                 variant="contained"

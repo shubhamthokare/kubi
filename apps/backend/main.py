@@ -73,36 +73,44 @@ async def background_scanner():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    await connect_to_mongo()
-    
-    # Validate Gemini API Key connection
-    try:
-        from app.services.gemini_service import GeminiService
-        gemini_service = GeminiService()
-        print("Validating Gemini API key connection at startup...")
-        status = await gemini_service.validate_connection()
-        if status.get("status") == "success":
-            print(f"Gemini API check: SUCCESS - {status.get('message')}")
-        else:
-            print(f"Gemini API check: WARNING/ERROR - {status.get('message')}")
-    except Exception as e:
-        print(f"Failed to execute startup Gemini connection diagnosis: {e}")
+    # Startup: Skip DB connection and background tasks during testing to avoid external dependencies.
+    if getattr(settings, "ENVIRONMENT", None) != "test":
+        await connect_to_mongo()
         
-    # Initialize Elasticsearch indices
-    from app.services.incident_indexing import initialize_indices
-    initialize_indices()
+        # Validate Gemini API Key connection
+        try:
+            from app.services.gemini_service import GeminiService
+            gemini_service = GeminiService()
+            print("Validating Gemini API key connection at startup...")
+            status = await gemini_service.validate_connection()
+            if status.get("status") == "success":
+                print(f"Gemini API check: SUCCESS - {status.get('message')}")
+            else:
+                print(f"Gemini API check: WARNING/ERROR - {status.get('message')}")
+        except Exception as e:
+            print(f"Failed to execute startup Gemini connection diagnosis: {e}")
+        
+        # Initialize Elasticsearch indices
+        from app.services.incident_indexing import initialize_indices
+        initialize_indices()
     
-    # Start background scanner
-    scan_task = asyncio.create_task(background_scanner())
+        # Start background scanner
+        scan_task = asyncio.create_task(background_scanner())
+    else:
+        # In test environment, set scan_task to None placeholder
+        scan_task = None
+    
     yield
     # Shutdown
-    scan_task.cancel()
-    await close_mongo_connection()
-    
-    # Close Elasticsearch connection
-    from app.services.elasticsearch_service import close_es
-    close_es()
+    if scan_task:
+        scan_task.cancel()
+    # Close Mongo connection if it was opened
+    if getattr(settings, "ENVIRONMENT", None) != "test":
+        await close_mongo_connection()
+        
+        # Close Elasticsearch connection
+        from app.services.elasticsearch_service import close_es
+        close_es()
 
 app = FastAPI(
     title="kubi AI",

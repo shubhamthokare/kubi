@@ -25,27 +25,27 @@ spec:
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: kubi-all-secrets
+              name: kubi-secrets
               key: DB_PASSWORD
         - name: RESEND_API_KEY
           valueFrom:
             secretKeyRef:
-              name: kubi-all-secrets
+              name: kubi-secrets
               key: RESEND_API_KEY
         - name: JWT_SECRET_KEY
           valueFrom:
             secretKeyRef:
-              name: kubi-all-secrets
+              name: kubi-secrets
               key: JWT_SECRET_KEY
         - name: GEMINI_API_KEY
           valueFrom:
             secretKeyRef:
-              name: kubi-all-secrets
+              name: kubi-secrets
               key: GEMINI_API_KEY
         - name: GITLAB_TOKEN
           valueFrom:
             secretKeyRef:
-              name: kubi-all-secrets
+              name: kubi-secrets
               key: GITLAB_TOKEN
         # ── Arize Tracing ─────────────────────────────────────────
         - name: ENVIRONMENT

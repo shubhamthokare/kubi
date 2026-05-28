@@ -4,17 +4,21 @@
 
 echo "Starting Kubi AI Deployment on Minikube..."
 
-# Check for local deployment flag
+# Check for local or prod deployment flags
 USE_LOCAL=false
+USE_PROD=false
 for arg in "$@"; do
     if [ "$arg" = "--local" ] || [ "$arg" = "-l" ] || [ "$arg" = "local" ]; then
         USE_LOCAL=true
-        break
+    elif [ "$arg" = "--prod" ] || [ "$arg" = "-p" ] || [ "$arg" = "prod" ] || [ "$arg" = "-Prod" ]; then
+        USE_PROD=true
     fi
 done
 
 if [ "$USE_LOCAL" = true ]; then
     echo "Starting Kubi AI Deployment on Minikube (LOCAL mode)..."
+elif [ "$USE_PROD" = true ]; then
+    echo "Starting Kubi AI Deployment on Minikube (PRODUCTION mode)..."
 else
     echo "Starting Kubi AI Deployment on Minikube (GLOBAL mode)..."
 fi
@@ -58,8 +62,8 @@ if [ "$USE_LOCAL" = true ]; then
     kubectl rollout restart deployment kubi-agent -n kubi
 else
     # 4. Apply Standard/Global Manifests
-    echo "Applying Kubernetes Manifests with global registry images..."
-    kubectl apply -k deploy/k8s/
+    echo "Applying Kubernetes Manifests using Production Kustomize overlay..."
+    kubectl apply -k deploy/k8s/overlays/prod/
 fi
 
 minikube service kubi-frontend-service -n kubi

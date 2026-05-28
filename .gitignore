@@ -81,6 +81,7 @@ nosetests.xml
 coverage.xml
 *.cover
 *.log
+logs/
 .hypothesis/
 .ruamel/
 .mypy_cache/
@@ -205,3 +206,7 @@ deploy/k8s/secrets/
 
 # Added by ggshield
 .cache_ggshield
+
+# local db
+local-dev/mongodb_data/
+mongodb_data/

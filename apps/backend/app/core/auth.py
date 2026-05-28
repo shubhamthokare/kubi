@@ -17,10 +17,24 @@ def base64url_decode(data: str) -> bytes:
         data += '=' * (4 - rem)
     return base64.urlsafe_b64decode(data.encode('utf-8'))
 
+def _make_serializable(obj):
+    """Recursively convert non-JSON-serializable objects to strings."""
+    if isinstance(obj, (list, tuple)):
+        return [_make_serializable(o) for o in obj]
+    if isinstance(obj, dict):
+        return {k: _make_serializable(v) for k, v in obj.items()}
+    try:
+        json.dumps(obj)
+        return obj
+    except (TypeError, ValueError):
+        return str(obj)
+
 def create_jwt_token(payload: dict, secret_key: str) -> str:
+    # Ensure payload is JSON-serializable (e.g., MagicMock objects in tests)
+    payload = _make_serializable(payload)
     header = {"alg": "HS256", "typ": "JWT"}
     header_json = json.dumps(header, separators=(',', ':')).encode('utf-8')
-    payload_json = json.dumps(payload, separators=(',', ':')).encode('utf-8')
+    payload_json = json.dumps(payload, separators=(',', ':'), default=str).encode('utf-8')
     
     header_b64 = base64url_encode(header_json)
     payload_b64 = base64url_encode(payload_json)

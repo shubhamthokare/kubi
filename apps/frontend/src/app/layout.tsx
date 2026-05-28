@@ -42,12 +42,14 @@ const darkTheme = createTheme({
 function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const isAuthPage = pathname === '/login' || pathname?.startsWith('/auth/callback');
+  const isAuthPage = pathname ? (pathname === '/login' || pathname === '/register' || pathname === '/verify-email' || pathname.startsWith('/auth/callback')) : true;
   const [mounted, setMounted] = React.useState(false);
   const [authorized, setAuthorized] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
+    if (!pathname) return; // Prevent redirect check until pathname is fully resolved on the client
+
     const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
     if (token) {
       setAuthorized(true);

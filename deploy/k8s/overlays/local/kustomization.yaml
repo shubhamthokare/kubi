@@ -1,6 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+namespace: kubi
+
 resources:
   - ../../base/
   # ingress.yaml removed - using local nginx Docker container instead (local-dev/)
@@ -18,3 +20,15 @@ images:
   - name: kubi-frontend
     newName: kubi-frontend
     newTag: latest
+
+secretGenerator:
+  - name: kubi-all-secrets
+    literals:
+      - DB_PASSWORD=dummy
+      - RESEND_API_KEY=dummy
+      - JWT_SECRET_KEY=kubi-sre-secret-key-change-me-in-production
+      - GEMINI_API_KEY=REMOVED_EXPOSED_SECRET
+      - GITLAB_TOKEN=REMOVED_EXPOSED_SECRET
+
+generatorOptions:
+  disableNameSuffixHash: true

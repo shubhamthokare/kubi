@@ -24,7 +24,12 @@ import {
   Grid,
   Alert,
   Snackbar,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions
 } from '@mui/material';
 import { kubiApi } from '@/lib/api';
 
@@ -53,6 +58,37 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    try {
+      setDeleting(true);
+      const token = localStorage.getItem('access_token');
+      const res = await fetch('/api/auth/delete-account', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Failed to delete account.');
+      }
+      
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('username');
+      localStorage.removeItem('active_cluster_id');
+      window.location.href = '/register';
+    } catch (error: any) {
+      alert(error.message || 'An error occurred during account deletion.');
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+    }
+  };
   
   // Real Settings State
   const [settings, setSettings] = useState({
@@ -285,6 +321,42 @@ export default function SettingsPage() {
                         </Typography>
                       </Box>
                     </Stack>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="h6" fontWeight="bold" color="#ef4444" gutterBottom>
+                      Danger Zone
+                    </Typography>
+                    <Divider sx={{ my: 2, borderColor: 'rgba(239, 68, 68, 0.2)' }} />
+                    <Card sx={{ bgcolor: 'rgba(239, 68, 68, 0.03)', borderRadius: 3, border: '1px solid rgba(239, 68, 68, 0.15)', p: 2.5 }}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Box sx={{ textAlign: 'left' }}>
+                          <Typography variant="body1" color="white" fontWeight="semibold">Delete SRE Account</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            Permanently delete your account, owned workspaces, and all associated cluster mappings. This action is irreversible.
+                          </Typography>
+                        </Box>
+                        <Button
+                          variant="contained"
+                          color="error"
+                          onClick={() => setDeleteDialogOpen(true)}
+                          sx={{
+                            borderRadius: 2,
+                            px: 3,
+                            py: 1.2,
+                            textTransform: 'none',
+                            fontWeight: 'bold',
+                            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.2)',
+                            '&:hover': {
+                              bgcolor: '#dc2626',
+                              boxShadow: '0 6px 16px rgba(239, 68, 68, 0.3)',
+                            }
+                          }}
+                        >
+                          Delete Account
+                        </Button>
+                      </Stack>
+                    </Card>
                   </Box>
                 </Stack>
               </CardContent>
@@ -647,6 +719,48 @@ export default function SettingsPage() {
           Configuration updated successfully!
         </Alert>
       </Snackbar>
+
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => !deleting && setDeleteDialogOpen(false)}
+        PaperProps={{
+          sx: {
+            bgcolor: '#0f172a',
+            border: '1px solid rgba(255,255,255,0.05)',
+            borderRadius: 3,
+            p: 2,
+            maxWidth: 450
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: 'white', fontWeight: 'bold' }}>
+          Delete Account Permanently?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ color: 'text.secondary', fontSize: '0.95rem' }}>
+            Are you absolutely sure you want to delete your account? All workspaces, connection configurations, and SRE credentials will be permanently and irreversibly deleted.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ pt: 2, px: 3 }}>
+          <Button
+            onClick={() => setDeleteDialogOpen(false)}
+            disabled={deleting}
+            sx={{ color: 'text.secondary', textTransform: 'none', fontWeight: 'bold' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteAccount}
+            disabled={deleting}
+            variant="contained"
+            color="error"
+            startIcon={deleting ? <CircularProgress size={16} color="inherit" /> : null}
+            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 'bold', px: 3 }}
+          >
+            {deleting ? 'Deleting...' : 'Delete Account'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }

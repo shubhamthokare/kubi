@@ -107,15 +107,7 @@ class TestPhase1Security(unittest.TestCase):
             self.assertEqual(data["scopes"], ["sre:read", "admin"])
             self.assertIn("access_token", data)
 
-    def test_login_routes_fallback_redirection(self):
-        client = TestClient(app)
-        with patch('app.api.auth_routes.settings.SSO_CLIENT_ID', ''), \
-             patch('app.api.auth_routes.settings.ENVIRONMENT', 'development'):
-            response = client.get("/api/auth/login/google", follow_redirects=False)
-            self.assertEqual(response.status_code, 307)
-            self.assertIn("/auth/callback?code=mock_dev_code&state=google", response.headers["location"])
-
-    @patch('app.db.database.get_db')
+# Test removed due to SSO removal    @patch('app.db.database.get_db')
     def test_protected_routes_authorization(self, mock_get_db):
         client = TestClient(app)
         

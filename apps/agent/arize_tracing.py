@@ -17,7 +17,12 @@ from arize.otel import register
 from opentelemetry import trace
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.sdk.trace import TracerProvider
+try:
+    from opentelemetry.sdk.trace import TracerProvider
+except ImportError:
+    class TracerProvider:  # type: ignore
+        """Fallback dummy TracerProvider when opentelemetry is not installed."""
+        pass
 
 logger = logging.getLogger(__name__)
 

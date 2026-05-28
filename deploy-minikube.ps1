@@ -1,14 +1,20 @@
 param (
-    [switch]$Local = $false
+    [switch]$Local = $false,
+    [switch]$Prod = $false
 )
 
-# Parse additional arguments to support both switch and string arguments (e.g. 'local')
+# Parse additional arguments to support both switch and string arguments (e.g. 'local', 'prod')
 if ($args -contains "local" -or $args -contains "-l" -or $args -contains "--local") {
     $Local = $true
+}
+if ($args -contains "prod" -or $args -contains "-p" -or $args -contains "--prod" -or $args -contains "-Prod") {
+    $Prod = $true
 }
 
 if ($Local) {
     Write-Host "Starting Kubi AI Deployment on Minikube (LOCAL mode)..." -ForegroundColor Cyan
+} elseif ($Prod) {
+    Write-Host "Starting Kubi AI Deployment on Minikube (PRODUCTION mode)..." -ForegroundColor Cyan
 } else {
     Write-Host "Starting Kubi AI Deployment on Minikube (GLOBAL mode)..." -ForegroundColor Cyan
 }

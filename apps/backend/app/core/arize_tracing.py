@@ -14,13 +14,28 @@ import os
 import logging
 from typing import Optional
 
-from arize.otel import register
-from openinference.instrumentation.google_genai import GoogleGenAIInstrumentor
-from opentelemetry import trace
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.requests import RequestsInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from opentelemetry.sdk.trace import TracerProvider
+try:
+    from arize.otel import register
+    from openinference.instrumentation.google_genai import GoogleGenAIInstrumentor
+    from opentelemetry import trace
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.requests import RequestsInstrumentor
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+    from opentelemetry.sdk.trace import TracerProvider
+    HAS_OTEL = True
+except ImportError:
+    HAS_OTEL = False
+    class TracerProvider:  # type: ignore
+        pass
+    class trace:  # type: ignore
+        @staticmethod
+        def set_tracer_provider(provider):
+            pass
+        @staticmethod
+        def get_tracer(name: str):
+            class DummyTracer:
+                pass
+            return DummyTracer()
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +102,9 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
     Returns:
         TracerProvider if successfully initialized, None if unconfigured or failed.
     """
+    if not HAS_OTEL:
+        logger.info("Arize tracing is inactive (OpenTelemetry libraries not installed).")
+        return None
     
     environment = os.getenv("ENVIRONMENT", "").lower()
     

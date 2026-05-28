@@ -126,7 +126,7 @@ GITLAB_PRIVATE_TOKEN=your-gitlab-token
 
 # Service URLs
 AGENT_URL=http://localhost:8080
-CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+CORS_ORIGINS=http://localhost:3000,http://localhost:8000,http://kubi.kontactless.in,http://backend.kubi.kontactless.in,http://agent.kubi.kontactless.in
 
 # Search & Analytics
 ELASTICSEARCH_HOST=http://localhost:9200
