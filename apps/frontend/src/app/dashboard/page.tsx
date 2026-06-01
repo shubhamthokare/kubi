@@ -156,7 +156,7 @@ export default function DashboardPage() {
   };
 
   const isSystemHealthy =
-    stats.pods.failed === 0 && stats.nodes.total === stats.nodes.ready;
+    stats.nodes.total > 0 && stats.pods.failed === 0 && stats.nodes.total === stats.nodes.ready;
 
   // Use real-time resources for filters
   const namespaces = data.resources.namespaces;
@@ -165,195 +165,256 @@ export default function DashboardPage() {
 
   // Filter incidents for display
   const filteredIncidents = data.incidents.filter((incident: any) => {
+    const podNamespace = incident.pod?.namespace || incident.namespace || "";
+    const podName = incident.pod?.name || incident.pod_name || "";
+    
     if (
       namespaceFilter !== "all" &&
-      incident.pod?.namespace !== namespaceFilter
+      podNamespace !== namespaceFilter
     )
       return false;
     if (
       deploymentFilter !== "all" &&
-      !incident.pod?.name?.startsWith(deploymentFilter)
+      !podName.startsWith(deploymentFilter)
     )
       return false;
-    if (podFilter !== "all" && incident.pod?.name !== podFilter) return false;
+    if (podFilter !== "all" && podName !== podFilter) return false;
     return true;
   });
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      {/* Header */}
-      {/* Header Row: Overview + Unified Vitals */}
-      <Grid container spacing={3} sx={{ mb: 6, mt: 1 }}>
-        {/* Left Section: Branding & Configure (25%) */}
-        <Grid item xs={12} lg={3} sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <Box sx={{ px: { xs: 0, lg: 2 }, mb: { xs: 4, lg: 0 } }}>
-            <Typography variant="h3" fontWeight="900" color="white" sx={{ letterSpacing: '-0.04em', mb: 0.5, fontSize: { xs: '2rem', md: '2.5rem' } }}>
-              Cluster Overview
-            </Typography>
-            <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500, mb: 3, opacity: 0.8 }}>
+    <Container maxWidth="xl" sx={{ py: 1 }}>
+      {/* Top Header Row (Full Width) */}
+      <Box sx={{ mb: 4, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' }, gap: 3 }}>
+        <Box>
+          <Typography variant="h3" fontWeight="900" color="white" sx={{ letterSpacing: '-0.04em', mb: 0.5, fontSize: { xs: '2rem', md: '2.5rem' } }}>
+            Cluster Overview
+          </Typography>
+          <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
+            <Box 
+              className={settings?.clusters?.length > 0 ? "pulse-ring-1 glow-success" : "pulse-ring-1 glow-error"}
+              sx={{ 
+                width: 8, 
+                height: 8, 
+                borderRadius: '50%', 
+                bgcolor: loading ? 'text.secondary' : settings?.clusters?.length > 0 ? '#10b981' : '#ef4444' 
+              }} 
+            />
+            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
               Autonomous Status:{" "}
               {loading ? (
                 <Box component="span" sx={{ color: 'text.secondary', fontWeight: '800' }}>LOADING...</Box>
               ) : settings?.clusters?.length > 0 ? (
-                <Box component="span" sx={{ color: 'success.main', fontWeight: '800' }}>ACTIVE</Box>
+                <Box component="span" sx={{ color: '#10b981', fontWeight: '800', letterSpacing: '0.05em' }}>ACTIVE</Box>
               ) : (
-                <Box component="span" sx={{ color: 'error.main', fontWeight: '800' }}>INACTIVE</Box>
+                <Box component="span" sx={{ color: '#ef4444', fontWeight: '800', letterSpacing: '0.05em' }}>INACTIVE</Box>
               )}
             </Typography>
-            <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
-              <Button 
-                variant="contained" 
-                size="large" 
-                startIcon={<Settings size={20} />}
-                onClick={() => router.push('/dashboard/configure')}
-                sx={{ 
-                  bgcolor: 'primary.main',
-                  color: 'white',
-                  boxShadow: '0 8px 24px rgba(59, 130, 246, 0.25)',
-                  fontSize: '0.875rem',
-                  fontWeight: '800',
-                  textTransform: 'none',
-                  borderRadius: 2.5,
-                  py: 1.5,
-                  px: 4,
-                  '&:hover': {
-                    bgcolor: 'primary.dark',
-                    transform: 'translateY(-2px)',
-                  },
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                Cluster Connection
-              </Button>
-              <IconButton 
-                onClick={() => router.push('/settings')}
-                sx={{ 
-                  bgcolor: 'rgba(255,255,255,0.05)', 
-                  color: 'white',
-                  borderRadius: 2.5,
-                  p: 1.5,
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }
-                }}
-              >
-                <Settings size={24} />
-              </IconButton>
-            </Stack>
-          </Box>
-        </Grid>
+            <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.1)' }} />
+            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+              Uptime: <Box component="span" sx={{ color: 'white', fontWeight: 700 }}>{stats.uptime}</Box>
+            </Typography>
+            <Divider orientation="vertical" flexItem sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.1)' }} />
+            <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+              Namespaces: <Box component="span" sx={{ color: 'white', fontWeight: 700 }}>{stats.namespaces}</Box>
+            </Typography>
+          </Stack>
+        </Box>
         
-        {/* Right Section: System Vitals Card (75%) */}
-        <Grid item xs={12} lg={9}>
-          <Card 
-            elevation={0} 
+        {/* Connection Action Buttons */}
+        <Stack direction="row" spacing={2}>
+          <Button 
+            variant="contained" 
+            size="large" 
+            startIcon={<Settings size={18} />}
+            onClick={() => router.push('/dashboard/configure')}
             sx={{ 
-              bgcolor: 'rgba(255,255,255,0.02)', 
-              borderRadius: 4, 
-              border: '1px solid rgba(255,255,255,0.05)',
-              backdropFilter: 'blur(20px)',
-              overflow: 'hidden'
+              background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+              color: 'white',
+              boxShadow: '0 4px 16px rgba(59, 130, 246, 0.25)',
+              fontSize: '0.85rem',
+              fontWeight: '800',
+              textTransform: 'none',
+              borderRadius: 2.5,
+              py: 1.25,
+              px: 3.5,
+              border: '1px solid rgba(255,255,255,0.1)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
+                transform: 'translateY(-2px)',
+                boxShadow: '0 6px 20px rgba(59, 130, 246, 0.35)',
+              },
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
             }}
           >
-            <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-              {/* Top Bar: Operational Metadata */}
-              <Box sx={{ px: 3, py: 1.5, borderBottom: '1px solid rgba(255,255,255,0.05)', bgcolor: 'rgba(255,255,255,0.02)' }}>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }}>
-                  <Typography variant="caption" fontWeight="800" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                    System Health & Operations
-                  </Typography>
-                  <Stack direction="row" spacing={{ xs: 2, md: 3 }} alignItems="center" flexWrap="wrap">
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'success.main', boxShadow: '0 0 10px #10b981' }} />
-                      <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>Uptime:</Typography>
-                      <Typography variant="caption" fontWeight="bold" color="white" sx={{ whiteSpace: 'nowrap' }}>{stats.uptime}</Typography>
-                    </Stack>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>NS:</Typography>
-                      <Typography variant="caption" fontWeight="bold" color="white">{stats.namespaces}</Typography>
-                    </Stack>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>Avg Res:</Typography>
-                      <Typography variant="caption" fontWeight="bold" color="white">{stats.avg_resolution_time}</Typography>
-                    </Stack>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>Last Scan:</Typography>
-                      <Typography variant="caption" fontWeight="bold" color="white" sx={{ whiteSpace: 'nowrap' }}>Just now</Typography>
-                    </Stack>
-                  </Stack>
-                </Stack>
+            Cluster Connection
+          </Button>
+          <IconButton 
+            onClick={() => router.push('/settings')}
+            sx={{ 
+              bgcolor: 'rgba(255,255,255,0.02)', 
+              color: 'rgba(255,255,255,0.7)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 2.5,
+              p: 1.25,
+              '&:hover': { 
+                bgcolor: 'rgba(255,255,255,0.06)',
+                color: 'white',
+                transform: 'translateY(-2px)'
+              },
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Settings size={20} />
+          </IconButton>
+        </Stack>
+      </Box>
+
+      {/* Responsive Vitals Metrics Cards Grid (Row 2 - Spans 4 Columns) */}
+      <Grid container spacing={3} sx={{ mb: 5 }}>
+        {/* Card 1: Node Capacity */}
+        <Grid item xs={12} sm={6} lg={3}>
+          <Card className="glass glass-hover" elevation={0}>
+            <CardContent sx={{ p: 3 }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                <Typography variant="caption" color="rgba(255,255,255,0.5)" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Node Capacity
+                </Typography>
+                <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'rgba(96, 165, 250, 0.1)', display: 'flex' }}>
+                  <Server size={18} color="#60a5fa" />
+                </Box>
+              </Stack>
+              <Typography variant="h4" fontWeight="950" color="white" sx={{ mb: 1, letterSpacing: '-0.02em' }}>
+                {Math.round((stats.nodes.ready / (stats.nodes.total || 1)) * 100)}%
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                {stats.nodes.ready} of {stats.nodes.total} Nodes Ready
+              </Typography>
+              <LinearProgress 
+                variant="determinate" 
+                value={Math.round((stats.nodes.ready / (stats.nodes.total || 1)) * 100)} 
+                sx={{ 
+                  height: 6, 
+                  borderRadius: 3, 
+                  bgcolor: 'rgba(255,255,255,0.04)',
+                  '& .MuiLinearProgress-bar': {
+                    background: 'linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%)',
+                    borderRadius: 3
+                  }
+                }}
+              />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Card 2: Pod Health */}
+        <Grid item xs={12} sm={6} lg={3}>
+          <Card className="glass glass-hover" elevation={0}>
+            <CardContent sx={{ p: 3 }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                <Typography variant="caption" color="rgba(255,255,255,0.5)" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Pod Health
+                </Typography>
+                <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'rgba(16, 185, 129, 0.1)', display: 'flex' }}>
+                  <Activity size={18} color="#10b981" />
+                </Box>
+              </Stack>
+              <Typography variant="h4" fontWeight="950" color="white" sx={{ mb: 1, letterSpacing: '-0.02em' }}>
+                {Math.round((stats.pods.running / (stats.pods.total || 1)) * 100)}%
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                {stats.pods.running} of {stats.pods.total} Pods Running
+              </Typography>
+              <LinearProgress 
+                variant="determinate" 
+                value={Math.round((stats.pods.running / (stats.pods.total || 1)) * 100)} 
+                sx={{ 
+                  height: 6, 
+                  borderRadius: 3, 
+                  bgcolor: 'rgba(255,255,255,0.04)',
+                  '& .MuiLinearProgress-bar': {
+                    background: 'linear-gradient(90deg, #10b981 0%, #34d399 100%)',
+                    borderRadius: 3
+                  }
+                }}
+              />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Card 3: Stability */}
+        <Grid item xs={12} sm={6} lg={3}>
+          <Card className="glass glass-hover" elevation={0}>
+            <CardContent sx={{ p: 3 }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                <Typography variant="caption" color="rgba(255,255,255,0.5)" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Stability Index
+                </Typography>
+                <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'rgba(167, 139, 250, 0.1)', display: 'flex' }}>
+                  <Globe size={18} color="#a78bfa" />
+                </Box>
+              </Stack>
+              <Typography variant="h4" fontWeight="950" color="white" sx={{ mb: 1, letterSpacing: '-0.02em' }}>
+                {isSystemHealthy ? "100%" : "85%"}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                {stats.pods.failed} Failed • {stats.pods.pending} Pending Pods
+              </Typography>
+              <LinearProgress 
+                variant="determinate" 
+                value={isSystemHealthy ? 100 : 85} 
+                sx={{ 
+                  height: 6, 
+                  borderRadius: 3, 
+                  bgcolor: 'rgba(255,255,255,0.04)',
+                  '& .MuiLinearProgress-bar': {
+                    background: isSystemHealthy 
+                      ? 'linear-gradient(90deg, #8b5cf6 0%, #a78bfa 100%)' 
+                      : 'linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%)',
+                    borderRadius: 3
+                  }
+                }}
+              />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Card 4: Automation Brain */}
+        <Grid item xs={12} sm={6} lg={3}>
+          <Card className="glass glass-hover" elevation={0}>
+            <CardContent sx={{ p: 3 }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                <Typography variant="caption" color="rgba(255,255,255,0.5)" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Autonomous Status
+                </Typography>
+                <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'rgba(245, 158, 11, 0.1)', display: 'flex' }}>
+                  <Zap size={18} color="#f59e0b" />
+                </Box>
+              </Stack>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5, mb: 1.5 }}>
+                {loading ? (
+                  <Skeleton width={100} height={36} sx={{ bgcolor: 'rgba(255,255,255,0.05)' }} />
+                ) : (
+                  <Chip 
+                    label={settings?.clusters?.length > 0 ? "ACTIVE" : "INACTIVE"} 
+                    sx={{ 
+                      background: settings?.clusters?.length > 0 
+                        ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(52, 211, 153, 0.05) 100%)' 
+                        : 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(248, 113, 113, 0.05) 100%)', 
+                      color: settings?.clusters?.length > 0 ? '#34d399' : '#f87171',
+                      border: settings?.clusters?.length > 0 ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
+                      fontSize: '0.75rem', 
+                      fontWeight: 800,
+                      height: 28,
+                      px: 0.5,
+                      boxShadow: settings?.clusters?.length > 0 ? '0 0 16px rgba(16, 185, 129, 0.1)' : '0 0 16px rgba(239, 68, 68, 0.1)'
+                    }} 
+                  />
+                )}
               </Box>
-
-              {/* Main Metrics Grid */}
-              <Grid container>
-                <Grid item xs={12} sx={{ p: 3 }}>
-                  <Grid container spacing={3} alignItems="center">
-                    {/* Groups of Metrics */}
-                    <Grid item xs={6} sm={4} md={2}>
-                      <Stack spacing={0.5}>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Node Capacity</Typography>
-                        <Typography variant="h5" fontWeight="900" color="primary">
-                          {Math.round((stats.nodes.ready / (stats.nodes.total || 1)) * 100)}%
-                        </Typography>
-                      </Stack>
-                    </Grid>
-                    
-                    <Divider orientation="vertical" flexItem sx={{ mx: 2, borderColor: 'rgba(255,255,255,0.05)', display: { xs: 'none', md: 'block' } }} />
-                    
-                    <Grid item xs={6} sm={4} md={2}>
-                      <Stack spacing={0.5}>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pod Health</Typography>
-                        <Typography variant="h5" fontWeight="900" color="success.main">
-                          {Math.round((stats.pods.running / (stats.pods.total || 1)) * 100)}%
-                        </Typography>
-                      </Stack>
-                    </Grid>
-
-                    <Divider orientation="vertical" flexItem sx={{ mx: 2, borderColor: 'rgba(255,255,255,0.05)', display: { xs: 'none', md: 'block' } }} />
-
-                    <Grid item xs={6} sm={4} md={2}>
-                      <Stack spacing={0.5}>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stability</Typography>
-                        <Typography variant="h5" fontWeight="900" color={isSystemHealthy ? "success.main" : "warning.main"}>
-                          {isSystemHealthy ? "100%" : "85%"}
-                        </Typography>
-                      </Stack>
-                    </Grid>
-
-                    <Divider orientation="vertical" flexItem sx={{ mx: 2, borderColor: 'rgba(255,255,255,0.05)', display: { xs: 'none', md: 'block' } }} />
-
-                    <Grid item xs={12} sm={6} md={3} sx={{ ml: 'auto' }}>
-                      <Box sx={{ 
-                        p: 2, 
-                        borderRadius: 3, 
-                        bgcolor: loading ? 'rgba(255,255,255,0.02)' : settings?.clusters?.length > 0 ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)', 
-                        border: loading ? '1px solid rgba(255,255,255,0.05)' : settings?.clusters?.length > 0 ? '1px solid rgba(16, 185, 129, 0.1)' : '1px solid rgba(239, 68, 68, 0.1)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center'
-                      }}>
-                        <Typography variant="caption" color={loading ? "text.secondary" : settings?.clusters?.length > 0 ? "success.main" : "error.main"} sx={{ fontWeight: 800, mb: 1, textTransform: 'uppercase' }}>
-                          Autonomous Status
-                        </Typography>
-                        {loading ? (
-                          <Skeleton width={80} height={24} sx={{ bgcolor: "rgba(255,255,255,0.1)", borderRadius: 1 }} />
-                        ) : (
-                          <Chip 
-                            label={settings?.clusters?.length > 0 ? "ACTIVE" : "INACTIVE"} 
-                            color={settings?.clusters?.length > 0 ? "success" : "error"} 
-                            sx={{ 
-                              height: 24, 
-                              px: 1,
-                              fontSize: '0.65rem', 
-                              fontWeight: 900, 
-                              borderRadius: 1,
-                              boxShadow: settings?.clusters?.length > 0 ? '0 0 12px rgba(16, 185, 129, 0.3)' : '0 0 12px rgba(239, 68, 68, 0.3)'
-                            }} 
-                          />
-                        )}
-                      </Box>
-                    </Grid>
-                  </Grid>
-                </Grid>
-              </Grid>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2.2 }}>
+                Avg Recovery: <Box component="span" sx={{ color: 'white', fontWeight: 700 }}>{stats.avg_resolution_time}</Box>
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
@@ -696,8 +757,8 @@ export default function DashboardPage() {
                                     color="white"
                                   >
                                     {incident.title ||
-                                      (incident.pod
-                                        ? `Incident: ${incident.pod.name}`
+                                      (incident.pod?.name || incident.pod_name
+                                        ? `Incident: ${incident.pod?.name || incident.pod_name}`
                                         : "Unknown Incident")}
                                   </Typography>
                                   <Typography
@@ -705,8 +766,8 @@ export default function DashboardPage() {
                                     display="block"
                                     color="text.secondary"
                                   >
-                                    {incident.pod?.namespace} |{" "}
-                                    {incident.pod?.reason}
+                                    {incident.pod?.namespace || incident.namespace || "default"} |{" "}
+                                    {incident.pod?.reason || incident.type || "Error"}
                                   </Typography>
                                 </Box>
                               </Stack>

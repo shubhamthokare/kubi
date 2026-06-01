@@ -6,7 +6,7 @@ from datetime import datetime
 from app.core.security import get_current_user_with_scope, rate_limit
 from app.core.auth import create_access_token
 from app.db.database import get_db
-from app.api.schemas import CreateWorkspaceRequest, InviteMemberRequest
+from app.api.schemas import CreateWorkspaceRequest, InviteMemberRequest, UpdateWorkspaceRequest
 
 router = APIRouter(prefix="/workspaces", tags=["Workspaces"])
 
@@ -284,3 +284,76 @@ async def switch_workspace(
         "workspace_id": ws_id,
         "workspace_role": new_role
     }
+
+@router.get("/{workspace_id}/members", response_model=List[Dict[str, Any]], dependencies=[Depends(rate_limit(30))])
+async def list_workspace_members(
+    workspace_id: str,
+    workspace_user: dict = Depends(get_current_workspace_user)
+):
+    """Lists all members of the specified workspace, including their names, emails, and roles."""
+    db = get_db()
+    try:
+        ws_oid = ObjectId(workspace_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid workspace ID format.")
+        
+    memberships = await db["workspace_members"].find({"workspace_id": ws_oid}).to_list(length=None)
+    
+    user_ids = [m["user_id"] for m in memberships]
+    users = await db["users"].find({"_id": {"$in": user_ids}}).to_list(length=None)
+    
+    user_map = {u["_id"]: u for u in users}
+    
+    result = []
+    for m in memberships:
+        u = user_map.get(m["user_id"])
+        result.append({
+            "user_id": str(m["user_id"]),
+            "email": u.get("email") if u else "unknown@domain.com",
+            "name": u.get("name") if u else "Unknown User",
+            "role": m["role"],
+            "joined_at": m.get("joined_at")
+        })
+    return result
+
+@router.patch("/{workspace_id}", status_code=status.HTTP_200_OK, dependencies=[Depends(rate_limit(10)), Depends(require_workspace_role(["owner", "admin"]))])
+async def update_workspace(
+    workspace_id: str,
+    req: UpdateWorkspaceRequest,
+    workspace_user: dict = Depends(get_current_workspace_user)
+):
+    """Updates a workspace's details (e.g. name). Action requires Owner or Admin role."""
+    db = get_db()
+    try:
+        ws_oid = ObjectId(workspace_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid workspace ID format.")
+        
+    ws = await db["workspaces"].find_one({"_id": ws_oid})
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+        
+    await db["workspaces"].update_one(
+        {"_id": ws_oid},
+        {"$set": {"name": req.name, "updated_at": datetime.utcnow()}}
+    )
+    
+    # Audit log
+    await db["audit_logs"].insert_one({
+        "workspace_id": ws_oid,
+        "user_id": workspace_user["user"]["_id"],
+        "action": "workspace_renamed",
+        "details": {
+            "old_name": ws["name"],
+            "new_name": req.name
+        },
+        "timestamp": datetime.utcnow()
+    })
+    
+    return {
+        "id": workspace_id,
+        "name": req.name,
+        "role": workspace_user["role"],
+        "created_at": ws.get("created_at")
+    }
+

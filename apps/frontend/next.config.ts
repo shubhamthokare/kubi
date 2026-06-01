@@ -11,6 +11,10 @@ const nextConfig: NextConfig = {
   //   - nginx Docker container via domain
   //   - local dev aliases
   allowedDevOrigins: [
+    '127.0.0.1',
+    'localhost',
+    '127.0.0.1:3000',
+    'localhost:3000',
     '10.5.0.2',
     'kubi.kontactless.in',
     'backend.kubi.kontactless.in',

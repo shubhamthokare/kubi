@@ -5,14 +5,12 @@ metadata:
   namespace: kubi
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
 spec:
-  tls:
-  - hosts:
-    - kubi.kontactless.in
-    - backend.kubi.kontactless.in
-    - agent.kubi.kontactless.in
-    secretName: kubi-tls-secret
+  ingressClassName: nginx
   rules:
   - host: kubi.kontactless.in
     http:

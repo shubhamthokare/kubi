@@ -1,26 +1,26 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: oklch(0.12 0.03 236);
+  --color-background: #030712;
   --color-foreground: oklch(0.98 0.01 236);
-  --color-card: oklch(0.12 0.03 236);
+  --color-card: rgba(15, 23, 42, 0.4);
   --color-card-foreground: oklch(0.98 0.01 236);
-  --color-popover: oklch(0.12 0.03 236);
+  --color-popover: #090d16;
   --color-popover-foreground: oklch(0.98 0.01 236);
-  --color-primary: oklch(0.64 0.17 256);
-  --color-primary-foreground: oklch(0.12 0.03 236);
-  --color-secondary: oklch(0.25 0.05 236);
+  --color-primary: #60a5fa;
+  --color-primary-foreground: #030712;
+  --color-secondary: #a78bfa;
   --color-secondary-foreground: oklch(0.98 0.01 236);
-  --color-muted: oklch(0.25 0.05 236);
+  --color-muted: rgba(30, 41, 59, 0.5);
   --color-muted-foreground: oklch(0.7 0.05 236);
-  --color-accent: oklch(0.25 0.05 236);
+  --color-accent: rgba(96, 165, 250, 0.1);
   --color-accent-foreground: oklch(0.98 0.01 236);
-  --color-destructive: oklch(0.4 0.18 20);
+  --color-destructive: #ef4444;
   --color-destructive-foreground: oklch(0.98 0.01 236);
-  --color-border: oklch(0.25 0.05 236);
-  --color-input: oklch(0.25 0.05 236);
-  --color-ring: oklch(0.5 0.2 256);
-  --radius-xl: 0.75rem;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-input: rgba(255, 255, 255, 0.05);
+  --color-ring: rgba(96, 165, 250, 0.5);
+  --radius-xl: 1rem;
 }
 
 @layer base {
@@ -30,21 +30,129 @@
     border-style: solid;
   }
   body {
-    background-color: var(--color-background);
+    background-color: #030712;
     color: var(--color-foreground);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
   }
 }
 
-/* Custom Glassmorphism adapted for new theme */
+/* Premium Cosmic Mesh & High-Tech Grid Overlays */
+.cosmic-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -10;
+  background: 
+    radial-gradient(120% 120% at 50% 0%, rgba(99, 102, 241, 0.05) 0%, rgba(0, 0, 0, 0) 60%),
+    radial-gradient(100% 100% at 100% 100%, rgba(139, 92, 246, 0.03) 0%, rgba(0, 0, 0, 0) 50%),
+    #030712;
+}
+
+.cosmic-bg::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.007) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.007) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: center;
+  mask-image: radial-gradient(ellipse 60% 50% at 50% 0%, black, transparent 70%);
+  pointer-events: none;
+}
+
+/* Cybernetic Glassmorphism & Translucence */
 .glass {
-  @apply bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 
+    inset 0 1px 1px rgba(255, 255, 255, 0.05),
+    0 8px 32px -4px rgba(0, 0, 0, 0.5);
+  border-radius: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-hover:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-4px);
+  box-shadow: 
+    inset 0 1px 2px rgba(255, 255, 255, 0.08),
+    0 20px 40px -8px rgba(0, 0, 0, 0.6);
 }
 
 .text-gradient {
-  @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-violet-400;
+  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Custom SRE Dashboard layouts */
+.sre-card {
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0px rgba(255, 255, 255, 0.02);
+}
+
+.sre-terminal-console {
+  background: #020617;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 20px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+/* Soft Neon Glowing Accents */
+.glow-primary {
+  box-shadow: 0 0 20px rgba(96, 165, 250, 0.15);
+}
+
+.glow-success {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+}
+
+.glow-warning {
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.15);
+}
+
+.glow-error {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.15);
+}
+
+/* Double pulsing rings animations */
+@keyframes ring-pulse-1 {
+  0% { transform: scale(0.95); opacity: 0.5; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+  100% { transform: scale(0.95); opacity: 0.5; }
+}
+
+@keyframes ring-pulse-2 {
+  0% { transform: scale(0.9); opacity: 0.3; }
+  50% { transform: scale(1.2); opacity: 0.6; }
+  100% { transform: scale(0.9); opacity: 0.3; }
+}
+
+.pulse-ring-1 {
+  animation: ring-pulse-1 3s infinite ease-in-out;
+}
+
+.pulse-ring-2 {
+  animation: ring-pulse-2 4s infinite ease-in-out;
 }
 
 @media print {
@@ -55,3 +163,144 @@
   .prose-headings { color: black !important; }
   .prose-p { color: #333 !important; }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   Predefined Cyber SRE Design System Styles (Vanilla CSS Tokens)
+   ────────────────────────────────────────────────────────────────────────────── */
+.sre-input-field .MuiOutlinedInput-root {
+  color: #ffffff !important;
+  background-color: rgba(15, 23, 42, 0.55) !important;
+  border-radius: 12px !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+.sre-input-field .MuiOutlinedInput-root fieldset {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.sre-input-field .MuiOutlinedInput-root:hover fieldset {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.sre-input-field .MuiOutlinedInput-root.Mui-focused {
+  background-color: rgba(15, 23, 42, 0.7) !important;
+  box-shadow: 0 0 16px rgba(96, 165, 250, 0.12) !important;
+}
+
+.sre-input-field .MuiOutlinedInput-root.Mui-focused fieldset {
+  border-color: #60a5fa !important;
+}
+
+.sre-input-field .MuiInputLabel-root {
+  color: rgba(255, 255, 255, 0.35) !important;
+  font-size: 0.85rem !important;
+  transition: all 0.2s !important;
+}
+
+.sre-input-field .MuiInputLabel-root.Mui-focused {
+  color: #60a5fa !important;
+}
+
+.sre-auth-card-upgraded {
+  background: rgba(15, 23, 42, 0.45) !important;
+  backdrop-filter: blur(24px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), inset 0 1px 1px rgba(255, 255, 255, 0.05) !important;
+  border-radius: 20px !important;
+}
+
+.sre-btn-submit {
+  padding: 14px 24px !important;
+  border-radius: 12px !important;
+  text-transform: none !important;
+  font-weight: 800 !important;
+  font-size: 0.9rem !important;
+  letter-spacing: 0.5px !important;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%) !important;
+  box-shadow: 0 8px 24px -4px rgba(59, 130, 246, 0.4) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.sre-btn-submit:hover {
+  box-shadow: 0 12px 28px -2px rgba(59, 130, 246, 0.5), 0 0 16px rgba(139, 92, 246, 0.2) !important;
+  transform: translateY(-1px) !important;
+  opacity: 0.95 !important;
+}
+
+.sre-btn-submit:active {
+  transform: translateY(0) !important;
+}
+
+/* Override Autofill styles to preserve premium SRE glassmorphism */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px rgba(15, 23, 42, 0.7) inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   SRE Pod Indicators & Animations
+   ────────────────────────────────────────────────────────────────────────────── */
+.pod-indicator-active {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #34d399;
+  box-shadow: 0 0 8px #34d399;
+  animation: pulse-emerald 2s infinite ease-in-out;
+}
+
+.pod-indicator-standalone {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #fbbf24;
+  box-shadow: 0 0 8px #fbbf24;
+  animation: pulse-amber 2s infinite ease-in-out;
+}
+
+@keyframes pulse-emerald {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+    box-shadow: 0 0 12px #34d399;
+  }
+}
+
+@keyframes pulse-amber {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+    box-shadow: 0 0 12px #fbbf24;
+  }
+}
+
+.ws-status-active {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  animation: pulse-emerald 2s infinite ease-in-out;
+}
+
+.ws-status-inactive {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+

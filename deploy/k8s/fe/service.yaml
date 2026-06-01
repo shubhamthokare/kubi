@@ -4,7 +4,7 @@ metadata:
   name: kubi-frontend-service
   namespace: kubi
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: kubi-frontend
   ports:

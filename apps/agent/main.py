@@ -27,7 +27,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("kubi-agent")
 
 KUBI_BACKEND_URL = os.getenv("KUBI_BACKEND_URL", "http://host.minikube.internal:8000")
-CLUSTER_ID = os.getenv("CLUSTER_ID", "remote-cluster-1")
+CLUSTER_ID_ENV = os.getenv("CLUSTER_ID", "")
+CLUSTER_ID = CLUSTER_ID_ENV if CLUSTER_ID_ENV and CLUSTER_ID_ENV.lower() not in ["auto", "dynamic"] else "remote-cluster-1"
 NAMESPACE = os.getenv("TARGET_NAMESPACE", "default")
 SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", "30"))
 
@@ -125,6 +126,29 @@ async def background_scanner():
 
 @app.on_event("startup")
 async def startup_event():
+    global CLUSTER_ID
+    if not CLUSTER_ID_ENV or CLUSTER_ID_ENV.lower() in ["auto", "dynamic"]:
+        # 1. Try to resolve CLUSTER_ID from current kubeconfig context name
+        try:
+            _, active_context = config.list_kube_config_contexts()
+            if active_context and 'name' in active_context:
+                CLUSTER_ID = active_context['name']
+                logger.info(f"Dynamically resolved CLUSTER_ID from kubeconfig context: {CLUSTER_ID}")
+        except Exception:
+            pass
+
+        # 2. Fall back to unique kube-system namespace UID
+        if CLUSTER_ID == "remote-cluster-1":
+            try:
+                kube_system = v1.read_namespace(name="kube-system")
+                if kube_system and kube_system.metadata and kube_system.metadata.uid:
+                    short_uid = kube_system.metadata.uid[:8]
+                    CLUSTER_ID = f"k8s-{short_uid}"
+                    logger.info(f"Dynamically resolved CLUSTER_ID from kube-system namespace UID: {CLUSTER_ID}")
+            except Exception as e:
+                logger.warning(f"Could not dynamically read kube-system namespace UID: {e}")
+
+    logger.info(f"Using CLUSTER_ID: {CLUSTER_ID}")
     asyncio.create_task(background_scanner())
 
 @app.get("/healthz")
@@ -143,7 +167,7 @@ def get_stats():
         failed_pods = 0
         pending_pods = 0
         for p in pods.items:
-            is_failed = p.status.phase not in ["Running", "Succeeded"]
+            is_failed = p.status.phase not in ["Running", "Succeeded", "Pending"]
             container_issue = False
             if p.status.container_statuses:
                 for status in p.status.container_statuses:
@@ -156,6 +180,8 @@ def get_stats():
                 running_pods += 1
             elif p.status.phase == "Pending":
                 pending_pods += 1
+        
+        total_active_pods = running_pods + failed_pods + pending_pods
         
         uptime = "N/A"
         if nodes.items:
@@ -172,7 +198,7 @@ def get_stats():
                 
         return {
             "nodes": {"total": len(nodes.items), "ready": ready_nodes},
-            "pods": {"total": len(pods.items), "running": running_pods, "failed": failed_pods, "pending": pending_pods},
+            "pods": {"total": total_active_pods, "running": running_pods, "failed": failed_pods, "pending": pending_pods},
             "namespaces": len(namespaces_list.items),
             "uptime": uptime
         }
@@ -283,6 +309,54 @@ def apply_manifest(payload: ManifestPayload):
         else:
             return {"success": False, "message": result.stderr}
     except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@app.get("/pods/{namespace}/{pod_name}/yaml")
+def get_pod_yaml(namespace: str, pod_name: str):
+    try:
+        pod = v1.read_namespaced_pod(name=pod_name, namespace=namespace)
+        pod_dict = client.ApiClient().sanitize_for_serialization(pod)
+        if "metadata" in pod_dict:
+            for k in ["uid", "resourceVersion", "generation", "creationTimestamp", "managedFields"]:
+                pod_dict["metadata"].pop(k, None)
+        if "status" in pod_dict:
+            pod_dict.pop("status")
+        import yaml
+        return {"yaml": yaml.dump(pod_dict)}
+    except ApiException as e:
+        raise HTTPException(status_code=e.status, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/stats/performance")
+def get_performance_stats():
+    try:
+        from kubernetes_service import KubernetesService
+        ks = KubernetesService()
+        return ks.get_performance_metrics()
+    except Exception as e:
+        logger.exception(f"Failed to fetch performance stats: {e}")
+        return {"cpu": 0, "memory": 0, "network": 0}
+
+@app.get("/events")
+def get_events(namespace: str = "default", limit: int = 20):
+    try:
+        from kubernetes_service import KubernetesService
+        ks = KubernetesService()
+        return ks.get_events(namespace, limit)
+    except Exception as e:
+        logger.exception(f"Failed to fetch events: {e}")
+        return []
+
+from action_engine import ActionEngine, RemediationAction
+
+@app.post("/actions/execute")
+async def execute_action(action: RemediationAction):
+    try:
+        engine = ActionEngine()
+        success, message = await engine.execute_action(action)
+        return {"success": success, "message": message}
+    except Exception as e:
+        logger.exception(f"Failed to execute action via ActionEngine: {e}")
         return {"success": False, "message": str(e)}
 
 if __name__ == "__main__":

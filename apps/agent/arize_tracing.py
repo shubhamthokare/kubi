@@ -13,16 +13,56 @@ import os
 import logging
 from typing import Optional
 
-from arize.otel import register
-from opentelemetry import trace
-from opentelemetry.instrumentation.requests import RequestsInstrumentor
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 try:
+    from opentelemetry import trace
     from opentelemetry.sdk.trace import TracerProvider
+    HAS_OTEL = True
 except ImportError:
+    HAS_OTEL = False
+
+HAS_FASTAPI_INSTRUMENTOR = False
+if HAS_OTEL:
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        HAS_FASTAPI_INSTRUMENTOR = True
+    except ImportError:
+        pass
+
+HAS_HTTP_INSTRUMENTOR = False
+if HAS_OTEL:
+    try:
+        from opentelemetry.instrumentation.requests import RequestsInstrumentor
+        HAS_HTTP_INSTRUMENTOR = True
+    except ImportError:
+        pass
+
+try:
+    from arize.otel import register
+    HAS_ARIZE = True
+except ImportError:
+    HAS_ARIZE = False
+
+if not HAS_OTEL:
     class TracerProvider:  # type: ignore
         """Fallback dummy TracerProvider when opentelemetry is not installed."""
         pass
+    class DummyContextManager:
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return False
+    class trace:  # type: ignore
+        @staticmethod
+        def set_tracer_provider(provider):
+            pass
+        @staticmethod
+        def get_tracer(name: str):
+            class DummyTracer:
+                def start_as_current_span(self, name, *args, **kwargs):
+                    return DummyContextManager()
+                def start_span(self, name, *args, **kwargs):
+                    return DummyContextManager()
+            return DummyTracer()
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +105,12 @@ def _register_tracer(
     api_key: Optional[str],
     project_name: str,
     phoenix_endpoint: Optional[str]
-) -> TracerProvider:
-    """Register either Arize Cloud or local OTel / Phoenix tracer provider."""
+) -> Optional[TracerProvider]:
+    """Register either Arize Cloud or local OTel / Phoenix / standard OTel tracer provider."""
     if is_cloud_ready:
+        if not HAS_ARIZE:
+            logger.error("Arize Cloud mode requested but arize-otel package is not installed.")
+            return None
         logger.info(f"Initializing Arize Cloud tracing for Kubi Agent (Project: {project_name})...")
         return register(
             space_id=space_id,
@@ -75,17 +118,31 @@ def _register_tracer(
             project_name=project_name,
         )
     
-    logger.info(f"Initializing local Arize Phoenix/OTLP tracing to '{phoenix_endpoint}'...")
-    register_kwargs = {
-        "project_name": project_name,
-        "endpoint": phoenix_endpoint,
-    }
-    
-    transport_val = _get_local_transport(phoenix_endpoint)
-    if transport_val is not None:
-        register_kwargs["transport"] = transport_val
+    if HAS_ARIZE:
+        logger.info(f"Initializing local Arize Phoenix/OTLP tracing to '{phoenix_endpoint}'...")
+        register_kwargs = {
+            "project_name": project_name,
+            "endpoint": phoenix_endpoint,
+        }
         
-    return register(**register_kwargs)
+        transport_val = _get_local_transport(phoenix_endpoint)
+        if transport_val is not None:
+            register_kwargs["transport"] = transport_val
+            
+        return register(**register_kwargs)
+    else:
+        logger.info(f"Initializing standard local OpenTelemetry tracing to '{phoenix_endpoint}' (arize-otel not installed)...")
+        try:
+            from opentelemetry.sdk.trace.export import BatchSpanProcessor
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+            
+            tracer_provider = TracerProvider()
+            otlp_exporter = OTLPSpanExporter(endpoint=phoenix_endpoint)
+            tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+            return tracer_provider
+        except ImportError:
+            logger.warning("Standard OTLP exporter not installed; falling back to simple TracerProvider.")
+            return TracerProvider()
 
 
 def initialize_arize_tracing() -> Optional[TracerProvider]:
@@ -97,6 +154,10 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
         TracerProvider if successfully initialized, None if unconfigured or failed.
     """
     
+    if not HAS_OTEL:
+        logger.info("Arize tracing is inactive (OpenTelemetry libraries not installed).")
+        return None
+
     environment = os.getenv("ENVIRONMENT", "").lower()
     
     # Get config variables
@@ -122,13 +183,18 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
             phoenix_endpoint=phoenix_endpoint
         )
         
+        if tracer_provider is None:
+            return None
+            
         # Instrument FastAPI (agent runs on FastAPI)
-        FastAPIInstrumentor().instrument()
-        logger.info("✓ Arize tracing initialized for FastAPI")
+        if HAS_FASTAPI_INSTRUMENTOR:
+            FastAPIInstrumentor().instrument()
+            logger.info("✓ Arize tracing initialized for FastAPI")
         
         # Instrument HTTP requests (to backend and K8s API)
-        RequestsInstrumentor().instrument()
-        logger.info("✓ Arize tracing initialized for HTTP requests")
+        if HAS_HTTP_INSTRUMENTOR:
+            RequestsInstrumentor().instrument()
+            logger.info("✓ Arize tracing initialized for HTTP requests")
         
         # Set global tracer provider
         trace.set_tracer_provider(tracer_provider)

@@ -13,6 +13,9 @@ import {
   Server,
   ChevronDown,
   LogOut,
+  Terminal,
+  FileText,
+  Briefcase,
 } from "lucide-react";
 import {
   AppBar,
@@ -35,8 +38,10 @@ import { kubiApi } from "@/lib/api";
 const navItems = [
   { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
   { name: "Analyzer", path: "/analyzer", icon: Activity },
+  { name: "Logs", path: "/logs", icon: Terminal },
   { name: "Incidents", path: "/incidents", icon: ShieldAlert },
   { name: "Remediation", path: "/remediation", icon: Wrench },
+  { name: "Playbooks", path: "/playbooks", icon: FileText },
   { name: "Settings", path: "/settings", icon: Settings },
 ];
 
@@ -44,6 +49,59 @@ export default function Navbar() {
   const pathname = usePathname();
   const [clusters, setClusters] = React.useState<any[]>([]);
   const [activeCluster, setActiveCluster] = React.useState<string>("");
+  const [workspaces, setWorkspaces] = React.useState<any[]>([]);
+  const [activeWorkspace, setActiveWorkspace] = React.useState<string>("");
+
+  React.useEffect(() => {
+    async function loadWorkspaces() {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+        if (!token) return;
+        
+        const list = await kubiApi.getWorkspaces();
+        setWorkspaces(list || []);
+
+        let activeWsId = localStorage.getItem('active_workspace_id');
+        if (!activeWsId) {
+          try {
+            const decoded = JSON.parse(atob(token.split('.')[1]));
+            activeWsId = decoded.workspace_id || '';
+            if (activeWsId) {
+              localStorage.setItem('active_workspace_id', activeWsId);
+            }
+          } catch (e) {
+            console.error("JWT decoding failed:", e);
+          }
+        }
+        
+        if (!activeWsId && list && list.length > 0) {
+          activeWsId = list[0].id;
+          localStorage.setItem('active_workspace_id', activeWsId);
+        }
+        
+        setActiveWorkspace(activeWsId || "");
+      } catch (err) {
+        console.error("Failed to load workspaces for navbar:", err);
+      }
+    }
+    loadWorkspaces();
+  }, []);
+
+  const handleWorkspaceChange = async (event: any) => {
+    const nextWorkspaceId = event.target.value;
+    try {
+      const res = await kubiApi.switchWorkspace(nextWorkspaceId);
+      if (res && res.access_token) {
+        localStorage.setItem("access_token", res.access_token);
+        localStorage.setItem("active_workspace_id", res.workspace_id);
+        localStorage.removeItem("active_cluster_id");
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error("Failed to switch workspace:", err);
+      alert("Failed to switch workspace. Please try again.");
+    }
+  };
 
   React.useEffect(() => {
     async function loadClusters() {
@@ -129,28 +187,30 @@ export default function Navbar() {
             spacing={1.5}
             component={Link}
             href="/dashboard"
-            sx={{ textDecoration: "none", mr: 8 }}
+            sx={{ textDecoration: "none", mr: 5, flexShrink: 0 }}
           >
             <Box
               sx={{
-                width: 40,
-                height: 40,
+                width: 38,
+                height: 38,
                 borderRadius: 2,
                 bgcolor: "primary.main",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 background: "linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)",
+                boxShadow: "0 4px 12px rgba(96, 165, 250, 0.3)",
               }}
             >
-              <Activity color="white" size={24} />
+              <Activity color="white" size={20} />
             </Box>
             <Typography
               variant="h6"
-              fontWeight="800"
+              fontWeight="900"
               sx={{
                 color: "white",
                 letterSpacing: "-0.5px",
+                whiteSpace: "nowrap",
                 display: { xs: "none", md: "block" },
               }}
             >
@@ -159,7 +219,7 @@ export default function Navbar() {
           </Stack>
 
           {/* Navigation Links */}
-          <Stack direction="row" spacing={1} sx={{ flexGrow: 1 }}>
+          <Stack direction="row" spacing={0.5} sx={{ flexGrow: 1, overflowX: "auto", pr: 2, "&::-webkit-scrollbar": { display: "none" } }}>
             {navItems.map((item) => {
               const isActive =
                 pathname === item.path || pathname?.startsWith(item.path + "/");
@@ -168,24 +228,30 @@ export default function Navbar() {
                   key={item.path}
                   component={Link}
                   href={item.path}
-                  startIcon={<item.icon size={18} />}
+                  startIcon={<item.icon size={16} />}
                   sx={{
                     px: 2,
-                    py: 1,
-                    borderRadius: 2,
+                    py: 0.75,
+                    borderRadius: 2.5,
                     textTransform: "none",
-                    fontWeight: 600,
-                    fontSize: "0.9rem",
-                    color: isActive ? "primary.main" : "text.secondary",
+                    fontWeight: isActive ? 700 : 600,
+                    fontSize: "0.85rem",
+                    color: isActive ? "#60a5fa" : "rgba(255, 255, 255, 0.6)",
                     bgcolor: isActive
-                      ? "rgba(96, 165, 250, 0.1)"
+                      ? "rgba(96, 165, 250, 0.08)"
                       : "transparent",
+                    border: isActive
+                      ? "1px solid rgba(96, 165, 250, 0.15)"
+                      : "1px solid transparent",
+                    boxShadow: isActive ? "0 4px 12px rgba(96, 165, 250, 0.05)" : "none",
                     "&:hover": {
                       bgcolor: isActive
-                        ? "rgba(96, 165, 250, 0.15)"
-                        : "rgba(255, 255, 255, 0.05)",
-                      color: isActive ? "primary.main" : "white",
+                        ? "rgba(96, 165, 250, 0.12)"
+                        : "rgba(255, 255, 255, 0.04)",
+                      color: "white",
+                      transform: "translateY(-1px)",
                     },
+                    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
                   }}
                 >
                   {item.name}
@@ -193,6 +259,88 @@ export default function Navbar() {
               );
             })}
           </Stack>
+
+          {/* Workspace Selector */}
+          {workspaces.length > 0 && (
+            <Box sx={{ minWidth: 180, mr: 2 }}>
+              <FormControl size="small" fullWidth>
+                <Select
+                  value={activeWorkspace}
+                  onChange={handleWorkspaceChange}
+                  displayEmpty
+                  IconComponent={() => <ChevronDown size={14} style={{ marginRight: 8, opacity: 0.6, color: "white" }} />}
+                  sx={{
+                    color: "white",
+                    fontWeight: 600,
+                    fontSize: "0.8rem",
+                    bgcolor: "rgba(255, 255, 255, 0.02)",
+                    border: "1px solid rgba(255, 255, 255, 0.06)",
+                    borderRadius: 2.5,
+                    height: 36,
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+                    "& .MuiSelect-select": {
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1.2,
+                      py: 1,
+                      pl: 1.5,
+                      pr: "28px !important",
+                    },
+                    "& .MuiOutlinedInput-notchedOutline": {
+                      border: "none",
+                    },
+                    "&:hover": {
+                      bgcolor: "rgba(255, 255, 255, 0.05)",
+                      border: "1px solid rgba(167, 139, 250, 0.35)",
+                      boxShadow: "0 0 12px rgba(167, 139, 250, 0.15)",
+                    },
+                    transition: "all 0.2s ease",
+                  }}
+                  MenuProps={{
+                    PaperProps: {
+                      sx: {
+                        bgcolor: "rgba(9, 13, 22, 0.95)",
+                        backdropFilter: "blur(12px)",
+                        border: "1px solid rgba(255, 255, 255, 0.08)",
+                        boxShadow: "0 12px 32px rgba(0,0,0,0.6)",
+                        borderRadius: 2.5,
+                        mt: 1,
+                        "& .MuiMenuItem-root": {
+                          color: "rgba(255, 255, 255, 0.65)",
+                          fontSize: "0.8rem",
+                          fontWeight: 500,
+                          py: 1,
+                          px: 2,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          "&.Mui-selected": {
+                            bgcolor: "rgba(167, 139, 250, 0.12)",
+                            color: "#a78bfa",
+                            fontWeight: 600,
+                            "&:hover": {
+                              bgcolor: "rgba(167, 139, 250, 0.18)",
+                            }
+                          },
+                          "&:hover": {
+                            bgcolor: "rgba(255, 255, 255, 0.04)",
+                            color: "white",
+                          }
+                        }
+                      }
+                    }
+                  }}
+                >
+                  {workspaces.map((ws) => (
+                    <MenuItem key={ws.id} value={ws.id}>
+                      <Briefcase size={13} style={{ color: "#a78bfa" }} />
+                      <span>{ws.name}</span>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+          )}
 
           {/* Cluster Selector */}
           {clusters.length > 0 && (
@@ -202,42 +350,46 @@ export default function Navbar() {
                   value={activeCluster}
                   onChange={handleClusterChange}
                   displayEmpty
-                  IconComponent={() => <ChevronDown size={16} style={{ marginRight: 8, opacity: 0.7 }} />}
+                  IconComponent={() => <ChevronDown size={14} style={{ marginRight: 8, opacity: 0.6, color: "white" }} />}
                   sx={{
                     color: "white",
                     fontWeight: 600,
-                    fontSize: "0.85rem",
-                    bgcolor: "rgba(255, 255, 255, 0.05)",
-                    border: "1px solid rgba(255, 255, 255, 0.1)",
-                    borderRadius: 2,
-                    height: 38,
+                    fontSize: "0.8rem",
+                    bgcolor: "rgba(255, 255, 255, 0.02)",
+                    border: "1px solid rgba(255, 255, 255, 0.06)",
+                    borderRadius: 2.5,
+                    height: 36,
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
                     "& .MuiSelect-select": {
                       display: "flex",
                       alignItems: "center",
-                      gap: 1.5,
+                      gap: 1.2,
                       py: 1,
                       pl: 1.5,
-                      pr: "32px !important",
+                      pr: "28px !important",
                     },
                     "& .MuiOutlinedInput-notchedOutline": {
                       border: "none",
                     },
                     "&:hover": {
-                      bgcolor: "rgba(255, 255, 255, 0.08)",
-                      border: "1px solid rgba(255, 255, 255, 0.2)",
+                      bgcolor: "rgba(255, 255, 255, 0.05)",
+                      border: "1px solid rgba(96, 165, 250, 0.35)",
+                      boxShadow: "0 0 12px rgba(96, 165, 250, 0.15)",
                     },
+                    transition: "all 0.2s ease",
                   }}
                   MenuProps={{
                     PaperProps: {
                       sx: {
-                        bgcolor: "#0f172a",
-                        border: "1px solid rgba(255, 255, 255, 0.1)",
-                        boxShadow: "0 12px 24px -4px rgba(0,0,0,0.5)",
-                        borderRadius: 2,
+                        bgcolor: "rgba(9, 13, 22, 0.95)",
+                        backdropFilter: "blur(12px)",
+                        border: "1px solid rgba(255, 255, 255, 0.08)",
+                        boxShadow: "0 12px 32px rgba(0,0,0,0.6)",
+                        borderRadius: 2.5,
                         mt: 1,
                         "& .MuiMenuItem-root": {
-                          color: "rgba(255, 255, 255, 0.7)",
-                          fontSize: "0.85rem",
+                          color: "rgba(255, 255, 255, 0.65)",
+                          fontSize: "0.8rem",
                           fontWeight: 500,
                           py: 1,
                           px: 2,
@@ -245,15 +397,15 @@ export default function Navbar() {
                           alignItems: "center",
                           gap: 1,
                           "&.Mui-selected": {
-                            bgcolor: "rgba(96, 165, 250, 0.15)",
+                            bgcolor: "rgba(96, 165, 250, 0.12)",
                             color: "#60a5fa",
                             fontWeight: 600,
                             "&:hover": {
-                              bgcolor: "rgba(96, 165, 250, 0.2)",
+                              bgcolor: "rgba(96, 165, 250, 0.18)",
                             }
                           },
                           "&:hover": {
-                            bgcolor: "rgba(255, 255, 255, 0.05)",
+                            bgcolor: "rgba(255, 255, 255, 0.04)",
                             color: "white",
                           }
                         }
@@ -263,7 +415,7 @@ export default function Navbar() {
                 >
                   {clusters.map((cluster) => (
                     <MenuItem key={cluster.id} value={cluster.id}>
-                      <Server size={14} style={{ color: "#60a5fa" }} />
+                      <Server size={13} style={{ color: "#60a5fa" }} />
                       <span>{cluster.name}</span>
                     </MenuItem>
                   ))}

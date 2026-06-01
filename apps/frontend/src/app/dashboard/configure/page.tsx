@@ -19,7 +19,9 @@ import {
   Check,
   X,
   PlusCircle,
-  Settings2
+  Settings2,
+  Timer,
+  Clock
 } from 'lucide-react';
 import { 
   Box, 
@@ -78,6 +80,31 @@ export default function MultiClusterConfigurePage() {
   const [validationStates, setValidationStates] = useState<Record<string, { status: 'idle' | 'testing' | 'success' | 'error', message: string }>>({});
   const [testingApi, setTestingApi] = useState(false);
   const [apiStatus, setApiStatus] = useState<any>(null);
+  const [cooldownSeconds, setCooldownSeconds] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const activeKeys = Object.keys(cooldownSeconds).filter(k => cooldownSeconds[k] > 0);
+    if (activeKeys.length === 0) return;
+
+    const interval = setInterval(() => {
+      setCooldownSeconds(prev => {
+        const next = { ...prev };
+        let changed = false;
+        for (const key of Object.keys(next)) {
+          if (next[key] > 0) {
+            next[key] -= 1;
+            changed = true;
+            if (next[key] <= 0) {
+              delete next[key];
+            }
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [cooldownSeconds]);
 
   useEffect(() => {
     async function loadSettings() {
@@ -111,6 +138,7 @@ export default function MultiClusterConfigurePage() {
   }, []);
 
   const testClusterConnection = async (clusterId: string, clusterObj?: any) => {
+    if (cooldownSeconds[clusterId] > 0) return;
     const targetCluster = clusterObj || clusters.find(c => c.id === clusterId);
     if (!targetCluster) return;
     try {
@@ -140,10 +168,27 @@ export default function MultiClusterConfigurePage() {
         }));
       }
     } catch (error: any) {
-      setValidationStates(prev => ({
-        ...prev,
-        [clusterId]: { status: 'error', message: error.message || 'Offline' }
-      }));
+      if (error.status === 429) {
+        // Parse dynamic cooldown seconds or default to 60
+        let seconds = 60;
+        const match = error.message.match(/(\d+) seconds/);
+        if (match && match[1]) {
+          seconds = parseInt(match[1], 10);
+        }
+        setCooldownSeconds(prev => ({
+          ...prev,
+          [clusterId]: seconds
+        }));
+        setValidationStates(prev => ({
+          ...prev,
+          [clusterId]: { status: 'error', message: error.message || 'Rate limit exceeded' }
+        }));
+      } else {
+        setValidationStates(prev => ({
+          ...prev,
+          [clusterId]: { status: 'error', message: error.message || 'Offline' }
+        }));
+      }
     }
   };
 
@@ -408,6 +453,50 @@ export default function MultiClusterConfigurePage() {
                 </Button>
               </Stack>
 
+              {Object.keys(cooldownSeconds).length > 0 && (
+                <Paper
+                  sx={{
+                    p: 3,
+                    mb: 3.5,
+                    background: 'rgba(249, 115, 22, 0.05)',
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(249, 115, 22, 0.2)',
+                    borderRadius: 3,
+                    position: 'relative',
+                    overflow: 'hidden',
+                    '&::before': {
+                      content: '""',
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '4px',
+                      height: '100%',
+                      bgcolor: '#f97316'
+                    }
+                  }}
+                >
+                  <Stack direction="row" spacing={2.5} alignItems="flex-start">
+                    <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'rgba(249, 115, 22, 0.1)', color: '#f97316' }}>
+                      <Timer size={24} className="animate-pulse" />
+                    </Box>
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="subtitle1" fontWeight="bold" color="white" gutterBottom>
+                        Rate Limit Shield Triggered (HTTP 429)
+                      </Typography>
+                      <Typography variant="body2" color="rgba(255, 255, 255, 0.7)" sx={{ mb: 2 }}>
+                        Operational security limits reached for connection diagnostics. The platform has automatically initiated a client-side cooldown lock to protect infrastructure performance.
+                      </Typography>
+                      <Stack direction="row" spacing={1.5} alignItems="center">
+                        <CircularProgress size={16} sx={{ color: '#f97316' }} />
+                        <Typography variant="caption" fontWeight="600" color="#f97316">
+                          Active Cooldown Remaining: {Math.max(...Object.values(cooldownSeconds), 0)}s
+                        </Typography>
+                      </Stack>
+                    </Box>
+                  </Stack>
+                </Paper>
+              )}
+
               {clusters.length === 0 ? (
                 <Paper sx={{ p: 6, textAlign: 'center', bgcolor: 'rgba(255,255,255,0.01)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: 3 }}>
                   <AlertTriangle size={32} style={{ color: '#fbbf24', margin: '0 auto 16px' }} />
@@ -428,6 +517,7 @@ export default function MultiClusterConfigurePage() {
                 <Stack spacing={2.5}>
                   {clusters.map((cluster) => {
                     const validation = validationStates[cluster.id] || { status: 'idle', message: 'Not checked' };
+                    const cooldown = cooldownSeconds[cluster.id] || 0;
                     return (
                       <Paper 
                         key={cluster.id}
@@ -452,10 +542,12 @@ export default function MultiClusterConfigurePage() {
                                   height: 8, 
                                   borderRadius: '50%',
                                   bgcolor: 
+                                    cooldown > 0 ? '#f97316' :
                                     validation.status === 'success' ? '#10b981' :
                                     validation.status === 'error' ? '#ef4444' :
                                     validation.status === 'testing' ? '#fbbf24' : '#6b7280',
                                   boxShadow: 
+                                    cooldown > 0 ? '0 0 10px #f97316' :
                                     validation.status === 'success' ? '0 0 10px #10b981' :
                                     validation.status === 'error' ? '0 0 10px #ef4444' :
                                     validation.status === 'testing' ? '0 0 10px #fbbf24' : 'none'
@@ -482,17 +574,20 @@ export default function MultiClusterConfigurePage() {
                               <Tooltip title={validation.message}>
                                 <Chip 
                                   icon={
+                                    cooldown > 0 ? <Timer size={12} className="animate-pulse" /> :
                                     validation.status === 'testing' ? <CircularProgress size={12} color="inherit" /> :
                                     validation.status === 'success' ? <Check size={12} /> :
                                     validation.status === 'error' ? <X size={12} /> : undefined
                                   }
                                   label={
+                                    cooldown > 0 ? `Cooldown (${cooldown}s)` :
                                     validation.status === 'testing' ? 'Testing' :
                                     validation.status === 'success' ? 'Connected' :
                                     validation.status === 'error' ? 'Offline' : 'Idle'
                                   }
                                   size="small"
                                   color={
+                                    cooldown > 0 ? 'warning' :
                                     validation.status === 'success' ? 'success' :
                                     validation.status === 'error' ? 'error' : 'default'
                                   }
@@ -501,7 +596,12 @@ export default function MultiClusterConfigurePage() {
                                 />
                               </Tooltip>
                               
-                              <IconButton size="small" onClick={() => testClusterConnection(cluster.id, cluster)} color="primary">
+                              <IconButton 
+                                size="small" 
+                                onClick={() => testClusterConnection(cluster.id, cluster)} 
+                                color={cooldown > 0 ? 'default' : 'primary'}
+                                disabled={cooldown > 0 || validation.status === 'testing'}
+                              >
                                 <RefreshCw size={16} className={validation.status === 'testing' ? "animate-spin" : ""} />
                               </IconButton>
                               

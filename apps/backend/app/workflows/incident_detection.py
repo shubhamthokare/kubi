@@ -31,9 +31,14 @@ class IncidentDetectionWorkflow:
         target_info = f"namespaces: {namespaces}" if namespaces else "cluster-wide"
         logger.info(f"Starting incident scan across {sanitize_log(target_info)}")
         
-        failed_pods = self.k8s_service.get_failed_pods(namespaces)
-        if not failed_pods:
-            return {"status": "ok", "message": "No failed pods detected.", "incidents": []}
+        # Resolve cluster_id dynamically from the active agent if not specified
+        if not cluster_id:
+            try:
+                cluster_id = self.k8s_service.get_agent_cluster_id()
+            except Exception as e:
+                logger.warning(f"Could not resolve cluster_id from agent: {e}")
+
+        failed_pods = self.k8s_service.get_failed_pods(namespaces) or []
         
         incidents = []
         current_failed_pod_ids = []
@@ -138,19 +143,23 @@ class IncidentDetectionWorkflow:
             gitlab_service = GitLabService()
             pipeline_status = await gitlab_service.get_latest_pipeline_status(service_name)
             
-            combined_logs = f"--- Kubernetes Logs ---\n{k8s_logs}\n\n--- Elastic Logs ---\n{elastic_logs}\n\n--- GitLab CI/CD Context ---\nLatest Pipeline Status: {pipeline_status['status']}\nStage: {pipeline_status['stage']}\nCommit: {pipeline_status['commit_message']}"
+            combined_logs = f"--- Kubernetes Logs ---\n{k8s_logs}\n\n--- Elastic Logs ---\n{elastic_logs}\n\n--- GitLab CI/CD Context ---\nLatest Pipeline Status: {pipeline_status.get('status', 'N/A')}\nStage: {pipeline_status.get('stage', 'N/A')}\nCommit: {pipeline_status.get('commit_message', 'N/A')}"
             
             pod_status_str = f"Phase: {pod['phase']}, Reason: {pod['reason']}, Message: {pod['message']}"
             
-            # Generate RCA
-            rca_result = await self.gemini_service.analyze_incident(pod_name, pod_status_str, combined_logs)
-            
-            # Generate Remediation Plan
-            remediation_plan = await self.gemini_service.generate_remediation_plan(pod_name, rca_result, combined_logs)
+            # Generate RCA & Remediation Plan with token tracking
+            from app.services.gemini_service import tokens_tracker
+            token_token = tokens_tracker.set(0)
+            try:
+                rca_result = await self.gemini_service.analyze_incident(pod_name, pod_status_str, combined_logs)
+                remediation_plan = await self.gemini_service.generate_remediation_plan(pod_name, rca_result, combined_logs)
+                total_tokens = tokens_tracker.get()
+            finally:
+                tokens_tracker.reset(token_token)
             
             plan_id = None
             if remediation_plan:
-                plan_id = await self.remediation_workflow.store_plan(remediation_plan)
+                plan_id = await self.remediation_workflow.store_plan(remediation_plan, tokens_consumed=total_tokens)
                 
                 # Auto-trigger GitLab pipeline if enabled and plan contains trigger_gitlab_pipeline action
                 if gitlab_enabled and plan_id and not loop_detected:
@@ -164,6 +173,7 @@ class IncidentDetectionWorkflow:
             
             # Create or update incident in MongoDB
             cluster_org = self.cluster_config.get("org", "kubi-org") if self.cluster_config else "kubi-org"
+            connection_id = self.cluster_config.get("id") if self.cluster_config else None
             await db.incidents.update_one(
                 {"id": pod_id, "status": "active"},
                 {
@@ -179,14 +189,15 @@ class IncidentDetectionWorkflow:
                         "ai_failed": plan_id is None,
                         "error_type": "API_KEY_BLOCKED" if plan_id is None and "API_KEY_SERVICE_BLOCKED" in rca_result else "GENERIC_FAILURE" if plan_id is None else None,
                         "cluster_id": cluster_id,
+                        "connection_id": connection_id if connection_id else cluster_id,
                         "org": cluster_org,
                         "gitlab_pipeline": pipeline_status,
                         "loop_detected": loop_detected,
-                        "requires_manual_approval": True if loop_detected else False
+                        "requires_manual_approval": True if loop_detected else False,
+                        "tokens_consumed": total_tokens
                     },
                     "$setOnInsert": {
                         "id": pod_id,
-                        "org": cluster_org,
                         "first_detected": datetime.now(timezone.utc).isoformat()
                     }
                 },
@@ -259,19 +270,41 @@ class IncidentDetectionWorkflow:
             # Only consider incidents for the namespaces and cluster we actually scanned
             resolution_query = {"status": "active"}
             if namespaces and "*" not in namespaces:
-                resolution_query["pod.namespace"] = {"$in": namespaces}
-            if cluster_id:
-                resolution_query["cluster_id"] = cluster_id
-            else:
-                resolution_query["cluster_id"] = {"$in": [None, "local-minikube"]}
+                resolution_query["$or"] = [
+                    {"pod.namespace": {"$in": namespaces}},
+                    {"namespace": {"$in": namespaces}}
+                ]
+            # If we are scanning a specific remote cluster, only resolve incidents on that cluster.
+            # If we are scanning the default local cluster, we can check and resolve all active incidents in the DB.
+            if cluster_id and cluster_id not in ["local-minikube", "k8s-e24dc7e3"]:
+                # If cluster_id looks like a dynamically resolved local cluster UID (e.g. "k8s-e24dc7e3"), we treat it as local default.
+                if not (isinstance(cluster_id, str) and cluster_id.startswith("k8s-") and len(cluster_id) == 12):
+                    resolution_query["cluster_id"] = cluster_id
             
             active_incidents_in_db = await db.incidents.find(resolution_query).to_list(1000)
             for doc in active_incidents_in_db:
-                doc_id = doc.get("id")
-                if doc_id and doc_id not in current_failed_pod_ids:
+                # 1. Retrieve pod_name and namespace robustly
+                pod_name = None
+                pod_ns = None
+                if "pod" in doc and doc["pod"]:
+                    pod_name = doc["pod"].get("name")
+                    pod_ns = doc["pod"].get("namespace")
+                else:
+                    pod_name = doc.get("pod_name")
+                    pod_ns = doc.get("namespace", "default")
+                
+                if not pod_name:
+                    continue
+
+                # 2. Check if this pod is currently in the failed pods list of the current scan
+                is_still_failing = False
+                for f_pod in failed_pods:
+                    if f_pod["name"] == pod_name and f_pod["namespace"] == pod_ns:
+                        is_still_failing = True
+                        break
+                
+                if not is_still_failing:
                     # Pod is no longer in the failed list. Verify health.
-                    pod_name = doc["pod"]["name"]
-                    pod_ns = doc["pod"]["namespace"]
                     if self.k8s_service.verify_pod_health(pod_name, pod_ns):
                         logger.info(f"Incident for pod {sanitize_log(pod_name)} resolved. Updating status and generating postmortem.")
                         resolved_at = datetime.now(timezone.utc).isoformat()
@@ -289,10 +322,25 @@ class IncidentDetectionWorkflow:
                         doc["status"] = "resolved"
                         doc["resolved_at"] = resolved_at
                         
-                        from app.services.reporting_service import ReportingService
-                        rs = ReportingService()
-                        await rs.generate_postmortem(doc)
+                        # Automatically resolve any associated pending remediation plans
+                        plan_id = doc.get("plan_id")
+                        if plan_id:
+                            try:
+                                await db.plans.update_one(
+                                    {"plan_id": plan_id, "status": "pending_approval"},
+                                    {"$set": {"status": "resolved"}}
+                                )
+                                logger.info(f"Remediation plan {sanitize_log(plan_id)} auto-resolved since incident is resolved.")
+                            except Exception as ple:
+                                logger.warning(f"Failed to auto-resolve remediation plan {plan_id}: {ple}")
+
+                        try:
+                            from app.services.reporting_service import ReportingService
+                            rs = ReportingService()
+                            await rs.generate_postmortem(doc)
+                        except Exception as pe:
+                            logger.warning(f"Failed to generate postmortem for {pod_name}: {pe}")
         except Exception as e:
             logging.exception(f"Error during resolution tracking: {e}")
             
-        return {"status": "issues_found", "incidents": incidents}
+        return {"status": "issues_found" if incidents else "ok", "incidents": incidents}

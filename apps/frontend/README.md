@@ -350,6 +350,14 @@ cat tailwind.config.ts
 
 ---
 
+## 🤖 Next.js 15 Agent Rules
+
+> [!IMPORTANT]
+> **This is NOT the Next.js you know.**
+> This version has breaking changes — APIs, conventions, and file structure may all differ from traditional training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+
+---
+
 ## 📄 License
 
 This project is licensed under the **MIT License** - see [LICENSE](./LICENSE) for details.
@@ -358,3 +366,4 @@ This project is licensed under the **MIT License** - see [LICENSE](./LICENSE) fo
 
 *Last Updated: May 20, 2026*
 *Kubi Frontend Documentation*
+

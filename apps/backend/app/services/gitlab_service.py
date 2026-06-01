@@ -63,7 +63,14 @@ class GitLabService:
                 projects = search_resp.json()
 
                 if not projects:
-                    return {"status": "unknown", "message": f"Project {service_name} not found"}
+                    return {
+                        "status": "unknown", 
+                        "pipeline_id": None,
+                        "project": service_name,
+                        "stage": "unknown",
+                        "commit_message": f"Project {service_name} not found on GitLab",
+                        "author": "system"
+                    }
 
                 project_id = projects[0]["id"]
 
@@ -77,7 +84,14 @@ class GitLabService:
                 pipelines = pipe_resp.json()
 
                 if not pipelines:
-                    return {"status": "none", "message": "No pipelines found"}
+                    return {
+                        "status": "none", 
+                        "pipeline_id": None,
+                        "project": service_name,
+                        "stage": "unknown",
+                        "commit_message": "No pipelines found on GitLab",
+                        "author": "system"
+                    }
 
                 pipeline = pipelines[0]
                 
@@ -99,7 +113,14 @@ class GitLabService:
                 }
         except Exception as e:
             logging.exception(f"GitLab API Error for {service_name}: {e}")
-            return {"status": "error", "message": str(e)}
+            return {
+                "status": "error",
+                "pipeline_id": None,
+                "project": service_name,
+                "stage": "unknown",
+                "commit_message": f"GitLab API Error: {str(e)}",
+                "author": "system"
+            }
 
     async def trigger_pipeline(self, target_name: str, action: str) -> tuple[bool, str]:
         """

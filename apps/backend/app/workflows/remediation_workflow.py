@@ -15,7 +15,7 @@ class RemediationWorkflow:
         self.action_engine = ActionEngine()
         self.reporting_service = ReportingService()
 
-    async def store_plan(self, plan: RemediationPlan) -> str:
+    async def store_plan(self, plan: RemediationPlan, tokens_consumed: int = 0) -> str:
         """Stores a plan in MongoDB and returns its unique ID."""
         db = get_db()
         plan_id = str(uuid.uuid4())
@@ -24,7 +24,8 @@ class RemediationWorkflow:
             "plan_id": plan_id,
             "status": "pending_approval",
             "plan": plan.model_dump(),
-            "generated_by": "ai"
+            "generated_by": "ai",
+            "tokens_consumed": tokens_consumed
         }
         
         await db.plans.insert_one(plan_dict)
@@ -37,6 +38,12 @@ class RemediationWorkflow:
         plan_entry = await db.plans.find_one({"plan_id": plan_id})
         if plan_entry:
             plan_entry["_id"] = str(plan_entry["_id"]) # stringify ObjectId
+            # Populate cluster_id and other details from associated incident
+            incident = await db.incidents.find_one({"plan_id": plan_id})
+            if incident:
+                plan_entry["cluster_id"] = incident.get("cluster_id") or incident.get("connection_id")
+                plan_entry["pod_name"] = incident.get("pod", {}).get("name") or incident.get("pod_name")
+                plan_entry["namespace"] = incident.get("pod", {}).get("namespace") or incident.get("namespace")
         return plan_entry
 
     async def get_all_plans(self) -> list:
@@ -45,6 +52,12 @@ class RemediationWorkflow:
         plans = await db.plans.find().to_list(length=None)
         for p in plans:
             p["_id"] = str(p["_id"])
+            # Populate cluster_id and other details from associated incident
+            incident = await db.incidents.find_one({"plan_id": p["plan_id"]})
+            if incident:
+                p["cluster_id"] = incident.get("cluster_id") or incident.get("connection_id")
+                p["pod_name"] = incident.get("pod", {}).get("name") or incident.get("pod_name")
+                p["namespace"] = incident.get("pod", {}).get("namespace") or incident.get("namespace")
         return plans
 
     async def approve_and_execute(self, plan_id: str, rating: int = None, feedback: str = None) -> dict:
@@ -194,6 +207,21 @@ class RemediationWorkflow:
             )
             logger.info(f"Incident associated with plan {sanitize_log(plan_id)} marked as resolved.")
 
+            # Spawn safe-mode rollback guards for eligible actions
+            for action in plan_obj.actions:
+                if action.action_type in ["restart_deployment", "rollback_deployment", "restart_pod"]:
+                    asyncio.create_task(
+                        self.monitor_safe_mode(
+                            plan_id=plan_id,
+                            action_type=action.action_type,
+                            target_name=action.target_name,
+                            namespace=action.namespace,
+                            duration_secs=300,
+                            agent_url=agent_url,
+                            cluster_config=cluster_config
+                        )
+                    )
+
             # Index remediation actions into Elasticsearch
             try:
                 from app.services.incident_indexing import store_remediation
@@ -257,3 +285,69 @@ class RemediationWorkflow:
         await db.incidents.update_one({"plan_id": plan_id}, {"$set": incident_update})
         
         return {"status": "rejected", "message": "Plan has been rejected and will not be executed."}
+
+    async def monitor_safe_mode(self, plan_id: str, action_type: str, target_name: str, namespace: str, duration_secs: int = 300, agent_url: str = None, cluster_config: dict = None):
+        """
+        Asynchronously monitors the health of the remediated resource for `duration_secs` (default 5 minutes).
+        Auto-triggers a rollback if health degrades.
+        """
+        import os
+        db = get_db()
+        action_engine = ActionEngine(agent_url=agent_url, cluster_config=cluster_config)
+        
+        # Support test override for rapid automated testing
+        duration_secs = int(os.environ.get("SAFE_MODE_DURATION_SECS", duration_secs))
+        poll_interval = int(os.environ.get("SAFE_MODE_POLL_INTERVAL", 30))
+        attempts = max(1, duration_secs // poll_interval)
+        
+        logger.info(f"🛡️ Safe-mode guard started for {target_name} ({action_type}) in namespace {namespace} for {duration_secs}s")
+        
+        for attempt in range(attempts):
+            await asyncio.sleep(poll_interval)
+            
+            # Check current health
+            is_healthy = True
+            try:
+                if action_type in ["restart_deployment", "rollback_deployment"]:
+                    is_healthy = action_engine.k8s_service.verify_deployment_health(target_name, namespace)
+                elif action_type == "restart_pod":
+                    is_healthy = action_engine.k8s_service.verify_pod_health(target_name, namespace)
+            except Exception as e:
+                logger.error(f"Error checking health during safe-mode poll: {e}")
+                is_healthy = False
+                
+            if not is_healthy:
+                logger.warning(f"🚨 SAFE-MODE ALERT: Health degraded for {target_name}! Initiating auto-rollback.")
+                
+                # Execute Rollback Action
+                rollback_success, msg = action_engine.k8s_service.rollback_deployment(target_name, namespace)
+                
+                # Update Database
+                await db.plans.update_one(
+                    {"plan_id": plan_id},
+                    {"$set": {"status": "rolled_back", "rollback_reason": f"Health degraded during safe-mode monitoring: {msg}"}}
+                )
+                await db.incidents.update_one(
+                    {"plan_id": plan_id},
+                    {"$set": {"status": "rolled_back", "resolved_at": None}}
+                )
+                
+                # Trigger ChatOps Notification
+                try:
+                    from app.services.chatops_service import get_chatops_service
+                    chatops = await get_chatops_service()
+                    if chatops:
+                        await chatops.notify_remediation(
+                            plan_id=plan_id,
+                            pod_name=target_name,
+                            namespace=namespace,
+                            status="rolled_back",
+                            actions_summary=f"Auto-rollback triggered: {msg}"
+                        )
+                except Exception as ce:
+                    logger.error(f"Failed to send ChatOps rollback alert: {ce}")
+                    
+                return
+                
+        logger.info(f"🛡️ Safe-mode guard completed. Resource {target_name} remained stable.")
+

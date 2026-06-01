@@ -28,11 +28,17 @@ class ReportingService:
             data_copy["execution_results"] = execution_results
 
         try:
-            # Generate report content
-            postmortem = await self.gemini_service.generate_postmortem(data_copy)
+            # Generate report content with token tracking
+            from app.services.gemini_service import tokens_tracker
+            token_token = tokens_tracker.set(0)
+            try:
+                postmortem = await self.gemini_service.generate_postmortem(data_copy)
+                pm_tokens = tokens_tracker.get()
+            finally:
+                tokens_tracker.reset(token_token)
             
             # Save to both incidents and reports collection
-            await self.save_report(incident_id, plan_id, postmortem)
+            await self.save_report(incident_id, plan_id, postmortem, pm_tokens)
             
             # Index RCA into Elasticsearch for historical retrieval
             try:
@@ -47,7 +53,7 @@ class ReportingService:
             logging.exception(f"Failed to generate postmortem: {e}")
             return f"# Postmortem Generation Error\nAn error occurred while generating the report for {pod_name}. Technical error: {str(e)}"
 
-    async def save_report(self, incident_id: str, plan_id: str, report_content: str):
+    async def save_report(self, incident_id: str, plan_id: str, report_content: str, pm_tokens: int = 0):
         """
         Saves the postmortem report to both incidents and reports collections for UI consistency.
         """
@@ -56,7 +62,10 @@ class ReportingService:
         # 1. Update the incident itself
         await db.incidents.update_one(
             {"id": incident_id},
-            {"$set": {"postmortem": report_content}}
+            {
+                "$set": {"postmortem": report_content},
+                "$inc": {"tokens_consumed": pm_tokens}
+            }
         )
         
         # 2. Create entry in reports collection for the dedicated Reports page

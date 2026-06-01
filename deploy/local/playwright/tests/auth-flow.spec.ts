@@ -26,6 +26,35 @@ async function getLatestOtp(email: string): Promise<string> {
   return doc?.code ?? '';
 }
 
+/**
+ * Clean up database records created for a test user.
+ */
+async function cleanupUser(email: string): Promise<void> {
+  const mongoUrl = process.env.MONGODB_URL ?? 'mongodb://localhost:27017';
+  const client = new MongoClient(mongoUrl);
+  await client.connect();
+  const db = client.db('kubi');
+  
+  const user = await db.collection('users').findOne({ email });
+  if (user) {
+    await db.collection('workspace_members').deleteMany({
+      $or: [
+        { user_id: user._id },
+        { user_id: user._id.toString() }
+      ]
+    });
+    await db.collection('workspaces').deleteMany({
+      $or: [
+        { owner_id: user._id },
+        { owner_id: user._id.toString() }
+      ]
+    });
+    await db.collection('users').deleteOne({ _id: user._id });
+  }
+  await db.collection('otps').deleteMany({ email });
+  await client.close();
+}
+
 if (!testEmail || !testPassword) {
   console.warn('TEST_USER_EMAIL or TEST_USER_PASSWORD not set – some tests will be skipped.');
 }
@@ -49,29 +78,34 @@ test.describe('Authentication Journey', () => {
     // Use a unique email for each run to avoid collisions
     const uniqueEmail = `playwright-${Date.now()}@example.com`;
     const pwd = `TestPass${Date.now()}!`;
-    await page.goto(`${baseURL}/register`);
     
-    // Fill registration fields using robust labels
-    await page.getByLabel('Full Name').fill('Playwright Test');
-    await page.getByLabel('Email Address').fill(uniqueEmail);
-    await page.locator('input[type="password"]').first().fill(pwd);
-    await page.getByLabel('Confirm Password').fill(pwd);
-    await page.getByRole('button', { name: 'Sign Up' }).click();
-    
-    // Wait for redirect to verification screen
-    await expect(page).toHaveURL(/.*\/verify-email/);
-    
-    // Retrieve OTP from MongoDB dynamically
-    await page.waitForTimeout(2000);
-    const otp = await getLatestOtp(uniqueEmail);
-    console.log(`Retrieved dynamic OTP for ${uniqueEmail}: ${otp}`);
-    
-    // Fill verification code using label
-    await page.getByLabel('Verification Code (6-Digit OTP)').fill(otp);
-    await page.getByRole('button', { name: 'Verify Code' }).click();
-    
-    // After verification, should be logged in and land on dashboard
-    await expect(page).toHaveURL(/.*\/dashboard/);
-    await expect(page.locator('text=Cluster Overview')).toBeVisible();
+    try {
+      await page.goto(`${baseURL}/register`);
+      
+      // Fill registration fields using robust labels
+      await page.getByLabel('Full Name').fill('Playwright Test');
+      await page.getByLabel('Email Address').fill(uniqueEmail);
+      await page.locator('input[type="password"]').first().fill(pwd);
+      await page.getByLabel('Confirm Password').fill(pwd);
+      await page.getByRole('button', { name: 'Sign Up' }).click();
+      
+      // Wait for redirect to verification screen
+      await expect(page).toHaveURL(/.*\/verify-email/, { timeout: 10000 });
+      
+      // Retrieve OTP from MongoDB dynamically
+      await page.waitForTimeout(2000);
+      const otp = await getLatestOtp(uniqueEmail);
+      console.log(`Retrieved dynamic OTP for ${uniqueEmail}: ${otp}`);
+      
+      // Fill verification code using label
+      await page.getByLabel('Verification Code (6-Digit OTP)').fill(otp);
+      await page.getByRole('button', { name: 'Verify Code' }).click();
+      
+      // After verification, should be logged in and land on dashboard
+      await expect(page).toHaveURL(/.*\/dashboard/);
+      await expect(page.locator('text=Cluster Overview')).toBeVisible();
+    } finally {
+      await cleanupUser(uniqueEmail);
+    }
   });
 });

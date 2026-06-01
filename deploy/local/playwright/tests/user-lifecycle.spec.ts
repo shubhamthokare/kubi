@@ -59,8 +59,8 @@ test.describe('User Lifecycle integration Journey', () => {
     expect(signupOtp).not.toBe('');
 
     console.log('[Step 1] Submitting email verification');
-    await page.locator('input').first().fill(signupOtp);
-    await page.locator('button[type="submit"]').click();
+    await page.getByLabel('Verification Code (6-Digit OTP)').fill(signupOtp);
+    await page.getByRole('button', { name: 'Verify Code' }).click();
 
     console.log('[Step 1] Waiting for redirect to dashboard');
     await expect(page).toHaveURL(/.*\/dashboard/, { timeout: 15000 });
@@ -82,7 +82,7 @@ test.describe('User Lifecycle integration Journey', () => {
     // 2. Forgot Password workflow
     // -------------------------------------------------
     console.log('[Step 2] Clicking Forgot Password link');
-    await page.locator('text=Forgot Password?').click();
+    await page.locator('a[href="/forgot-password"]').click();
     await expect(page).toHaveURL(/.*\/forgot-password/, { timeout: 10000 });
     await page.screenshot({ path: 'test-results/debug-06-forgot-page.png' });
 
@@ -102,10 +102,10 @@ test.describe('User Lifecycle integration Journey', () => {
     expect(resetOtp).not.toBe('');
 
     console.log('[Step 2] Submitting new password reset form');
-    await page.locator('input').first().fill(resetOtp);
-    await page.locator('input[type="password"]').fill(newPassword);
+    await page.getByLabel('Verification Code (6-Digit OTP)').fill(resetOtp);
+    await page.getByLabel('New Password').fill(newPassword);
     await page.screenshot({ path: 'test-results/debug-09-reset-filled.png' });
-    await page.locator('button[type="submit"]').click();
+    await page.getByRole('button', { name: 'Reset Password' }).click();
 
     console.log('[Step 2] Waiting for redirect to /login');
     await expect(page).toHaveURL(/.*\/login/, { timeout: 15000 });

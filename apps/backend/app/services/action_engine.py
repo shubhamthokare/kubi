@@ -31,10 +31,16 @@ class ActionEngine:
                     logger.info(f"Mapping restart_pod to restart_deployment for managed pod deployment target: {action.target_name}")
                     return self.k8s_service.restart_deployment(action.target_name, action.namespace)
                 
+            elif action.action_type == "apply_manifest":
+                manifest = getattr(action, "patch_content", None)
+                if not manifest:
+                    return False, "Apply manifest content is empty"
+                return self.k8s_service.apply_manifest(manifest)
+                
             elif action.action_type == "trigger_gitlab_pipeline":
                 from app.services.gitlab_service import GitLabService
                 gitlab_service = GitLabService()
-                return await gitlab_service.trigger_pipeline(action.target_name, action.reason)
+                return await gitlab_service.trigger_pipeline(action.target_name, "remediation")
                 
             else:
                 return False, f"Unknown action type: {action.action_type}"

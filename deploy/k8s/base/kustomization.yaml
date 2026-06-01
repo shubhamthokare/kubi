@@ -4,13 +4,10 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - configmap.yaml
-  - secrets/ClusterSecretStore.yaml
-  - secrets/ExternalSecret.yaml
   - ../agent/
   - ../db/
   - ../be/
   - ../fe/
   - ../es/
   - ../kibana/
-
 

@@ -90,7 +90,7 @@ cd apps/backend
 #### Create Environment File
 Create a `.env` file (or copy from `.env.example`):
 ```env
-GEMINI_API_KEY=your_actual_gemini_api_key
+GEMINI_API_KEY=dummy
 MONGODB_URL=mongodb://localhost:27017
 DATABASE_NAME=kubeguardian
 AGENT_URL=http://localhost:8080
@@ -123,7 +123,7 @@ cd ../../apps/agent
 
 #### Create Environment File
 ```env
-GEMINI_API_KEY=your_actual_gemini_api_key
+GEMINI_API_KEY=dummy
 BACKEND_URL=http://localhost:8000
 KUBERNETES_CONTEXT=minikube
 LOG_LEVEL=INFO
@@ -353,7 +353,7 @@ docker logs kubi-mongodb
 
 ### API Key Issues
 - Ensure `GEMINI_API_KEY` is set in `.env` (not empty or placeholder)
-- Test API key with: `curl -X POST https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=YOUR_KEY`
+- Test API key with: `curl -X POST https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=dummy`
 
 ### Node Modules/Dependencies Issues
 ```bash
@@ -377,7 +377,7 @@ pip install -r requirements.txt
 ### Backend (`apps/backend/.env`)
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `GEMINI_API_KEY` | Google Gemini API key for AI | `AIzaSyD...` |
+| `GEMINI_API_KEY` | Google Gemini API key for AI | `dummy` |
 | `MONGODB_URL` | MongoDB connection string | `mongodb://localhost:27017` |
 | `DATABASE_NAME` | Database name | `kubeguardian` |
 | `AGENT_URL` | Agent service URL | `http://localhost:8080` |
@@ -387,7 +387,7 @@ pip install -r requirements.txt
 ### Agent (`apps/agent/.env`)
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `GEMINI_API_KEY` | Google Gemini API key | `AIzaSyD...` |
+| `GEMINI_API_KEY` | Google Gemini API key | `dummy` |
 | `BACKEND_URL` | Backend service URL | `http://localhost:8000` |
 | `KUBERNETES_CONTEXT` | K8s context | `minikube`, `docker-desktop` |
 | `LOG_LEVEL` | Logging verbosity | `INFO`, `DEBUG` |

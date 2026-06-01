@@ -227,7 +227,7 @@ docker build -t kubi-backend:v1.0.0 .
 # Run Docker container
 docker run -d -p 8000:8000 \
   -e MONGODB_URL=mongodb://mongodb:27017 \
-  -e GEMINI_API_KEY=your_key \
+  -e GEMINI_API_KEY=dummy \
   --name kubi-backend \
   kubi-backend:latest
 
@@ -390,7 +390,7 @@ docker build -t kubi-agent:latest .
 # Run container
 docker run -d \
   -e BACKEND_URL=http://localhost:8000 \
-  -e GEMINI_API_KEY=your_key \
+  -e GEMINI_API_KEY=dummy \
   -v ~/.kube:/root/.kube \
   --name kubi-agent \
   kubi-agent:latest

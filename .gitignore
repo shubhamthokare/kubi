@@ -81,7 +81,7 @@ nosetests.xml
 coverage.xml
 *.cover
 *.log
-logs/
+/logs/
 .hypothesis/
 .ruamel/
 .mypy_cache/
@@ -165,14 +165,11 @@ deploy/k8s/base/.env
 # Kubernetes Secrets
 kubeconfig*
 secrets.dev.yaml
-deploy/k8s/base/secrets/*.yaml
-deploy/k8s/overlays/**/secrets/*.yaml
-deploy/k8s/secrets/*
-
-# Allow public structural secrets manifests
-!deploy/k8s/base/secrets/ClusterSecretStore.yaml
-!deploy/k8s/base/secrets/ExternalSecret.yaml
-deploy/k8s/secrets/
+deploy/k8s/secrets/local/.env
+deploy/k8s/secrets/local/*.private.env
+deploy/k8s/secrets/local/local.env.private
+deploy/k8s/secrets/external/gcp/*.json
+deploy/k8s/secrets/external/gcp/*.private.env
 # Deployment (Helm & Kubernetes)
 helm/*.tgz
 helm/charts/
@@ -202,7 +199,11 @@ secret-*.json
 *.passwd
 *.password
 *.pwd
-deploy/k8s/secrets/
+deploy/k8s/secrets/local/.env
+deploy/k8s/secrets/local/*.private.env
+deploy/k8s/secrets/local/local.env.private
+deploy/k8s/secrets/external/gcp/*.json
+deploy/k8s/secrets/external/gcp/*.private.env
 
 # Added by ggshield
 .cache_ggshield
@@ -210,3 +211,4 @@ deploy/k8s/secrets/
 # local db
 local-dev/mongodb_data/
 mongodb_data/
+.antigravity/mcp-servers.json

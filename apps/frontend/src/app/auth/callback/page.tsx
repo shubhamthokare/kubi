@@ -3,7 +3,8 @@
 import React, { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Loader2, ShieldAlert, CheckCircle2 } from 'lucide-react';
-import { Box, Card, Stack, Typography, Button, Container } from '@mui/material';
+import { Box, Stack, Typography, Button, Container } from '@mui/material';
+import { SreAuthCard } from '@/components/ui/sre-layout';
 
 function CallbackContent() {
   const searchParams = useSearchParams();
@@ -55,25 +56,14 @@ function CallbackContent() {
   }, [searchParams, router]);
 
   return (
-    <Card
-      sx={{
-        p: 4.5,
-        bgcolor: 'rgba(30, 41, 59, 0.7)',
-        backdropFilter: 'blur(20px)',
-        border: '1px solid rgba(255, 255, 255, 0.05)',
-        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
-        borderRadius: 4,
-        textAlign: 'center',
-        minWidth: 320,
-      }}
-    >
+    <SreAuthCard className="sre-auth-card-upgraded">
       {status === 'loading' && (
         <Stack spacing={3} alignItems="center">
           <Loader2 className="animate-spin" color="#60a5fa" size={48} />
           <Typography variant="h6" fontWeight="700" color="white">
             Establishing SRE Session
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
             Exchanging OAuth2 code & verifying cluster access scopes...
           </Typography>
         </Stack>
@@ -98,7 +88,7 @@ function CallbackContent() {
           <Typography variant="h6" fontWeight="700" color="white">
             Access Granted
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
             Syncing telemetry dashboard. Redirecting shortly...
           </Typography>
         </Stack>
@@ -123,7 +113,7 @@ function CallbackContent() {
           <Typography variant="h6" fontWeight="700" color="white">
             Authentication Failed
           </Typography>
-          <Typography variant="body2" color="error.main" sx={{ px: 2 }}>
+          <Typography variant="body2" color="error.main" sx={{ px: 2, fontSize: '0.85rem' }}>
             {errorMsg}
           </Typography>
           <Button
@@ -132,11 +122,15 @@ function CallbackContent() {
             sx={{
               mt: 2,
               textTransform: 'none',
-              fontWeight: 600,
+              fontWeight: 700,
+              fontSize: '0.85rem',
               color: 'white',
               borderColor: 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '10px',
+              px: 3,
+              py: 1,
               '&:hover': {
-                borderColor: 'primary.main',
+                borderColor: '#60a5fa',
                 bgcolor: 'rgba(96, 165, 250, 0.05)',
               },
             }}
@@ -145,7 +139,7 @@ function CallbackContent() {
           </Button>
         </Stack>
       )}
-    </Card>
+    </SreAuthCard>
   );
 }
 
@@ -154,36 +148,31 @@ export default function CallbackPage() {
     <Box
       sx={{
         minHeight: '100vh',
-        bgcolor: '#0f172a',
+        bgcolor: 'transparent',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'radial-gradient(circle at 50% 50%, #1e1b4b 0%, #0f172a 100%)',
         position: 'relative',
         overflow: 'hidden',
       }}
     >
-      <Container maxWidth="xs" sx={{ zIndex: 1, display: 'flex', justifyContent: 'center' }}>
+      {/* Pinned background grid and glows */}
+      <div className="cosmic-bg" />
+      
+      {/* Custom absolute blurs */}
+      <div className="absolute top-1/4 left-1/4 w-[350px] h-[350px] bg-blue-500/5 rounded-full blur-[100px] animate-pulse" />
+      <div className="absolute bottom-1/4 right-1/4 w-[350px] h-[350px] bg-violet-600/5 rounded-full blur-[100px]" />
+
+      <Container maxWidth="xs" sx={{ zIndex: 1, display: 'flex', justifyContent: 'center', py: 6 }}>
         <Suspense fallback={
-          <Card
-            sx={{
-              p: 4.5,
-              bgcolor: 'rgba(30, 41, 59, 0.7)',
-              backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.05)',
-              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
-              borderRadius: 4,
-              textAlign: 'center',
-              minWidth: 320,
-            }}
-          >
+          <SreAuthCard className="sre-auth-card-upgraded">
             <Stack spacing={3} alignItems="center">
               <Loader2 className="animate-spin" color="#60a5fa" size={48} />
               <Typography variant="h6" fontWeight="700" color="white">
                 Loading Auth context...
               </Typography>
             </Stack>
-          </Card>
+          </SreAuthCard>
         }>
           <CallbackContent />
         </Suspense>

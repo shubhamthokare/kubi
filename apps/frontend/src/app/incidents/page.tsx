@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   CheckCircle,
@@ -201,8 +202,8 @@ export default function IncidentsPage() {
 
     let ws: WebSocket | null = null;
     const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-    const pod = selectedIncident.pod?.name;
-    const namespace = selectedIncident.pod?.namespace || 'default';
+    const pod = selectedIncident.pod?.name || selectedIncident.pod_name || "";
+    const namespace = selectedIncident.pod?.namespace || selectedIncident.namespace || 'default';
 
     if (!pod || !token) {
       setLogConnectionStatus('error');
@@ -360,11 +361,11 @@ export default function IncidentsPage() {
       const query = searchQuery.toLowerCase();
 
       // Derived fields for filtering consistency
-      const podName = incident.pod?.name || "";
-      const podNamespace = incident.pod?.namespace || "";
+      const podName = incident.pod?.name || incident.pod_name || "";
+      const podNamespace = incident.pod?.namespace || incident.namespace || "";
       const derivedSeverity =
         incident.severity ||
-        (incident.pod?.phase === "Failed" ? "critical" : "high");
+        (incident.pod?.phase === "Failed" || !incident.pod ? "critical" : "high");
 
       const matchesSearch =
         (incident.id || "").toLowerCase().includes(query) ||
@@ -412,6 +413,26 @@ export default function IncidentsPage() {
             </Typography>
           </Box>
           <Stack direction="row" spacing={2}>
+            <Button
+              component={Link}
+              href="/incidents/ingest"
+              variant="outlined"
+              startIcon={<GitBranch size={16} />}
+              sx={{
+                borderRadius: 2,
+                px: 3,
+                textTransform: "none",
+                fontWeight: "bold",
+                borderColor: "rgba(255,255,255,0.15)",
+                color: "white",
+                "&:hover": {
+                  borderColor: "primary.main",
+                  bgcolor: "rgba(96,165,250,0.05)"
+                }
+              }}
+            >
+              Ingestion Hub
+            </Button>
             <Button
               variant="contained"
               startIcon={scanning ? <Loader2 size={18} /> : <Play size={18} />}
@@ -708,14 +729,14 @@ export default function IncidentsPage() {
                             variant: "outlined" as const,
                             color: "primary" as const,
                             icon: isActive && !hasPlan ? <Loader2 size={14} className="animate-spin" /> : <Wrench size={14} />,
-                            href: `/remediation?pod=${incident.pod?.name || ""}&namespace=${incident.pod?.namespace || ""}`
+                            href: `/remediation?pod=${incident.pod?.name || incident.pod_name || ""}&namespace=${incident.pod?.namespace || incident.namespace || ""}`
                           };
                         };
 
                         const actionProps = getActionProps();
                         const incidentSeverity =
                           incident.severity ||
-                          (incident.pod?.phase === "Failed"
+                          (incident.pod?.phase === "Failed" || !incident.pod
                             ? "critical"
                             : "high");
 
@@ -735,7 +756,7 @@ export default function IncidentsPage() {
                                 sx={{ fontWeight: "700", fontFamily: 'monospace' }}
                                 color="primary"
                               >
-                                {incident.pod?.namespace}/{incident.pod?.name || "N/A"}
+                                {incident.pod?.namespace || incident.namespace || "default"}/{incident.pod?.name || incident.pod_name || "N/A"}
                               </Typography>
                               <Typography variant="caption" color="text.secondary" sx={{ opacity: 0.5, fontSize: '0.65rem' }}>
                                 UID: {incident.id?.split('-').pop()?.slice(0, 8) || "N/A"}
@@ -744,8 +765,8 @@ export default function IncidentsPage() {
                             <TableCell>
                               <Typography variant="body2" color="white">
                                 {incident.title ||
-                                  (incident.pod?.name
-                                    ? `Anomaly in ${incident.pod.name}`
+                                  (incident.pod?.name || incident.pod_name
+                                    ? `Anomaly in ${incident.pod?.name || incident.pod_name}`
                                     : "Unknown Anomaly")}
                               </Typography>
                             </TableCell>
@@ -778,9 +799,9 @@ export default function IncidentsPage() {
                             </TableCell>
                             <TableCell>
                               <Typography variant="body2" color="white">
-                                {incident.pod?.creation_timestamp
+                                {incident.pod?.creation_timestamp || incident.first_detected || incident.created_at
                                   ? new Date(
-                                      incident.pod.creation_timestamp,
+                                      incident.pod?.creation_timestamp || incident.first_detected || incident.created_at
                                     ).toLocaleTimeString()
                                   : "N/A"}
                               </Typography>
@@ -794,8 +815,8 @@ export default function IncidentsPage() {
                                   ? new Date(incident.first_detected).toLocaleTimeString()
                                   : "Detecting..."}
                               </Typography>
-                              {incident.first_detected && incident.pod?.creation_timestamp && 
-                               new Date(incident.first_detected) < new Date(incident.pod.creation_timestamp) && (
+                              {incident.first_detected && (incident.pod?.creation_timestamp || incident.created_at) && 
+                               new Date(incident.first_detected) < new Date(incident.pod?.creation_timestamp || incident.created_at) && (
                                 <Typography variant="caption" color="warning.main" sx={{ fontSize: '0.6rem', display: 'block' }}>
                                   * Legacy record or clock drift
                                 </Typography>
@@ -882,13 +903,15 @@ export default function IncidentsPage() {
         anchor="right"
         open={Boolean(selectedIncident)}
         onClose={() => setSelectedIncident(null)}
+        sx={{ zIndex: (theme) => theme.zIndex.drawer + 10 }}
         PaperProps={{
           sx: {
             width: { xs: "100%", sm: 600, md: 700 },
-            bgcolor: "#0f172a",
+            bgcolor: "rgba(10, 15, 30, 0.95)",
+            backdropFilter: "blur(20px)",
             backgroundImage: "none",
             borderLeft: "1px solid rgba(255, 255, 255, 0.08)",
-            boxShadow: "-12px 0 36px rgba(0, 0, 0, 0.6)",
+            boxShadow: "-16px 0 48px rgba(0, 0, 0, 0.8)",
             p: 0,
             display: "flex",
             flexDirection: "column",
@@ -958,29 +981,48 @@ export default function IncidentsPage() {
             {/* Navigation Tabs */}
             <Box
               sx={{
-                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-                bgcolor: "#1e293b",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+                bgcolor: "rgba(15, 23, 42, 0.4)",
+                backdropFilter: "blur(10px)",
+                px: 1,
               }}
             >
               <Tabs
                 value={drawerTab}
                 onChange={(_, val) => setDrawerTab(val)}
-                variant="fullWidth"
+                variant="scrollable"
+                scrollButtons="auto"
+                allowScrollButtonsMobile
                 textColor="primary"
                 indicatorColor="primary"
                 sx={{
+                  minHeight: 52,
+                  "& .MuiTabs-scrollButtons": {
+                    color: "rgba(255, 255, 255, 0.6)",
+                  },
                   "& .MuiTab-root": {
                     textTransform: "none",
-                    fontWeight: "bold",
+                    fontWeight: 700,
                     fontSize: "0.8rem",
                     py: 1.5,
-                    color: "#94a3b8",
+                    px: { xs: 1.5, sm: 2.5 },
+                    minWidth: 0,
+                    color: "rgba(255, 255, 255, 0.5)",
+                    transition: "all 0.2s ease",
+                    "&:hover": {
+                      color: "white",
+                      transform: "translateY(-1px)",
+                    },
                   },
                   "& .Mui-selected": {
                     color: "#38bdf8 !important",
+                    textShadow: "0 0 8px rgba(56, 189, 248, 0.35)",
                   },
                   "& .MuiTabs-indicator": {
                     bgcolor: "#38bdf8",
+                    height: 3,
+                    borderRadius: "3px 3px 0 0",
+                    boxShadow: "0 -2px 10px rgba(56, 189, 248, 0.6)",
                   },
                 }}
               >
@@ -1012,7 +1054,7 @@ export default function IncidentsPage() {
                         Resource Metadata
                       </Typography>
                       <Grid container spacing={2}>
-                        <Grid item xs={6}>
+                        <Grid size={{ xs: 6 }}>
                           <Typography variant="caption" color="text.secondary">
                             Namespace
                           </Typography>
@@ -1023,7 +1065,7 @@ export default function IncidentsPage() {
                             {selectedIncident.pod?.namespace || "N/A"}
                           </Typography>
                         </Grid>
-                        <Grid item xs={6}>
+                        <Grid size={{ xs: 6 }}>
                           <Typography variant="caption" color="text.secondary">
                             Pod Name
                           </Typography>
@@ -1039,7 +1081,7 @@ export default function IncidentsPage() {
                             {selectedIncident.pod?.name || "N/A"}
                           </Typography>
                         </Grid>
-                        <Grid item xs={6}>
+                        <Grid size={{ xs: 6 }}>
                           <Typography variant="caption" color="text.secondary">
                             Resource Phase
                           </Typography>
@@ -1063,7 +1105,7 @@ export default function IncidentsPage() {
                             </Typography>
                           </Stack>
                         </Grid>
-                        <Grid item xs={6}>
+                        <Grid size={{ xs: 6 }}>
                           <Typography variant="caption" color="text.secondary">
                             Status
                           </Typography>
@@ -1082,7 +1124,7 @@ export default function IncidentsPage() {
                             {selectedIncident.status}
                           </Typography>
                         </Grid>
-                        <Grid item xs={6}>
+                        <Grid size={{ xs: 6 }}>
                           <Typography variant="caption" color="text.secondary">
                             First Detected
                           </Typography>
@@ -1092,7 +1134,7 @@ export default function IncidentsPage() {
                               : "N/A"}
                           </Typography>
                         </Grid>
-                        <Grid item xs={6}>
+                        <Grid size={{ xs: 6 }}>
                           <Typography variant="caption" color="text.secondary">
                             Resolved At
                           </Typography>
@@ -1102,8 +1144,16 @@ export default function IncidentsPage() {
                               : "Active / Unresolved"}
                           </Typography>
                         </Grid>
+                        <Grid size={{ xs: 6 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            LLM Tokens Consumed
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: "#38bdf8", fontWeight: "bold", mt: 0.5 }}>
+                            {selectedIncident.tokens_consumed !== undefined ? selectedIncident.tokens_consumed.toLocaleString() : "0"}
+                          </Typography>
+                        </Grid>
                         {selectedIncident.pod?.uid && (
-                          <Grid item xs={12}>
+                          <Grid size={{ xs: 12 }}>
                             <Typography variant="caption" color="text.secondary">
                               Pod UID
                             </Typography>
@@ -1121,7 +1171,7 @@ export default function IncidentsPage() {
                           </Grid>
                         )}
                         {selectedIncident.pod?.reason && (
-                          <Grid item xs={12}>
+                          <Grid size={{ xs: 12 }}>
                             <Typography variant="caption" color="text.secondary">
                               Failure Reason
                             </Typography>
@@ -1143,7 +1193,7 @@ export default function IncidentsPage() {
                           </Grid>
                         )}
                         {selectedIncident.pod?.message && (
-                          <Grid item xs={12}>
+                          <Grid size={{ xs: 12 }}>
                             <Typography variant="caption" color="text.secondary">
                               Pod Status Message
                             </Typography>
@@ -1173,14 +1223,17 @@ export default function IncidentsPage() {
                           bgcolor: "#020617",
                           border: "1px solid rgba(255, 255, 255, 0.08)",
                           borderRadius: 3,
-                          p: 2,
+                          p: 2.5,
                           fontFamily: "monospace",
                           fontSize: "0.8rem",
                           color: "#38bdf8",
-                          overflowX: "auto",
-                          maxHeight: 300,
+                          overflowY: "auto",
+                          maxHeight: 320,
                           whiteSpace: "pre-wrap",
-                          boxShadow: "inset 0 2px 8px rgba(0, 0, 0, 0.8)",
+                          wordBreak: "break-all",
+                          overflowWrap: "anywhere",
+                          lineHeight: 1.5,
+                          boxShadow: "inset 0 4px 20px rgba(0, 0, 0, 0.8)",
                           "&::-webkit-scrollbar": { width: 6, height: 6 },
                           "&::-webkit-scrollbar-thumb": {
                             bgcolor: "rgba(255, 255, 255, 0.15)",
@@ -1270,6 +1323,9 @@ export default function IncidentsPage() {
                         color: "#38bdf8",
                         overflowY: "auto",
                         height: "55vh",
+                        wordBreak: "break-all",
+                        overflowWrap: "anywhere",
+                        lineHeight: 1.5,
                         boxShadow: "inset 0 4px 20px rgba(0, 0, 0, 0.9)",
                         position: 'relative',
                         "&::-webkit-scrollbar": { width: 6, height: 6 },
@@ -1571,6 +1627,8 @@ export default function IncidentsPage() {
                                   lineHeight: 1.6,
                                   whiteSpace: "pre-wrap",
                                   fontSize: "0.875rem",
+                                  wordBreak: "break-word",
+                                  overflowWrap: "anywhere",
                                 }}
                               >
                                 {sec.content.trim()}
@@ -1653,7 +1711,7 @@ export default function IncidentsPage() {
                             />
                           </Stack>
                           <Grid container spacing={2.5}>
-                            <Grid item xs={6}>
+                            <Grid size={{ xs: 6 }}>
                               <Typography variant="caption" color="text.secondary">
                                 Repository Project
                               </Typography>
@@ -1664,7 +1722,7 @@ export default function IncidentsPage() {
                                 {selectedIncident.gitlab_pipeline.project || "N/A"}
                               </Typography>
                             </Grid>
-                            <Grid item xs={6}>
+                            <Grid size={{ xs: 6 }}>
                               <Typography variant="caption" color="text.secondary">
                                 Pipeline ID
                               </Typography>
@@ -1680,7 +1738,7 @@ export default function IncidentsPage() {
                                 #{selectedIncident.gitlab_pipeline.pipeline_id || "N/A"}
                               </Typography>
                             </Grid>
-                            <Grid item xs={6}>
+                            <Grid size={{ xs: 6 }}>
                               <Typography variant="caption" color="text.secondary">
                                 Build Stage
                               </Typography>
@@ -1691,7 +1749,7 @@ export default function IncidentsPage() {
                                 {selectedIncident.gitlab_pipeline.stage || "N/A"}
                               </Typography>
                             </Grid>
-                            <Grid item xs={6}>
+                            <Grid size={{ xs: 6 }}>
                               <Typography variant="caption" color="text.secondary">
                                 Triggered By
                               </Typography>
@@ -1715,7 +1773,7 @@ export default function IncidentsPage() {
                               </Stack>
                             </Grid>
                             {selectedIncident.gitlab_pipeline.commit_message && (
-                              <Grid item xs={12}>
+                              <Grid size={{ xs: 12 }}>
                                 <Divider sx={{ my: 1, borderColor: "rgba(255, 255, 255, 0.06)" }} />
                                 <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
                                   Git Commit Message / Ref
@@ -1732,6 +1790,9 @@ export default function IncidentsPage() {
                                     mt: 0.5,
                                     border: "1px solid rgba(255, 255, 255, 0.08)",
                                     whiteSpace: "pre-wrap",
+                                    wordBreak: "break-all",
+                                    overflowWrap: "anywhere",
+                                    lineHeight: 1.5,
                                   }}
                                 >
                                   {selectedIncident.gitlab_pipeline.commit_message}

@@ -16,6 +16,33 @@ const BASE_URL = typeof window !== 'undefined'
   ? '/api'
   : (process.env.BACKEND_URL ? `${process.env.BACKEND_URL}/api` : getBackendUrl());
 
+const handleResponse = async (response: Response) => {
+  if (response.status === 401 && typeof window !== 'undefined') {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("username");
+    localStorage.removeItem("active_cluster_id");
+    localStorage.removeItem("active_workspace_id");
+    localStorage.removeItem("user_scopes");
+    localStorage.removeItem("auth_provider");
+    window.location.href = "/login";
+    throw new Error("Session expired. Please log in again.");
+  }
+  if (!response.ok) {
+    let errorDetail = `API Error: ${response.statusText}`;
+    const status = response.status;
+    try {
+      const errJson = await response.json();
+      if (errJson && errJson.detail) {
+        errorDetail = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
+      }
+    } catch (_) {}
+    const error = new Error(errorDetail);
+    (error as any).status = status;
+    throw error;
+  }
+  return response.json();
+};
+
 export const api = {
   async get(endpoint: string) {
     const clusterId = typeof window !== 'undefined' ? localStorage.getItem('active_cluster_id') : null;
@@ -33,8 +60,7 @@ export const api = {
       method: 'GET',
       headers,
     });
-    if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-    return response.json();
+    return handleResponse(response);
   },
 
   async post(endpoint: string, data?: any) {
@@ -54,8 +80,26 @@ export const api = {
       headers,
       body: data ? JSON.stringify(data) : undefined,
     });
-    if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-    return response.json();
+    return handleResponse(response);
+  },
+
+  async delete(endpoint: string) {
+    const clusterId = typeof window !== 'undefined' ? localStorage.getItem('active_cluster_id') : null;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (clusterId) {
+      headers['x-cluster-id'] = clusterId;
+    }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(`${BASE_URL}${endpoint}`, {
+      method: 'DELETE',
+      headers,
+    });
+    return handleResponse(response);
   }
 };
 
@@ -83,6 +127,59 @@ export const kubiApi = {
   validateCluster: (data: any) => api.post('/clusters/validate', data),
   executeManualAction: (data: any) => api.post('/actions/manual', data),
   validateChatOps: (data: any) => api.post('/chatops/validate', data),
+  listPlaybooks: () => api.get('/playbooks'),
+  createPlaybook: (data: any) => api.post('/playbooks', data),
+  deletePlaybook: (playbookId: string) => api.delete(`/playbooks/${playbookId}`),
+  executePlaybook: (playbookId: string) => api.post(`/playbooks/${playbookId}/execute`),
+  getPodYaml: (namespace: string, podName: string) => api.get(`/pods/${namespace}/${podName}/yaml`),
+  getPerformanceStats: () => api.get('/stats/performance'),
+
+  // 👥 SaaS Workspaces
+  getWorkspaces: () => api.get('/workspaces'),
+  createWorkspace: (name: string) => api.post('/workspaces', { name }),
+  switchWorkspace: (workspaceId: string) => api.post(`/workspaces/${workspaceId}/switch`),
+  inviteWorkspaceMember: (workspaceId: string, email: string, role: string) => 
+    api.post(`/workspaces/${workspaceId}/invite`, { email, role }),
+  revokeWorkspaceMember: (workspaceId: string, userId: string) => 
+    api.delete(`/workspaces/${workspaceId}/members/${userId}`),
+  getWorkspaceMembers: (workspaceId: string) => 
+    api.get(`/workspaces/${workspaceId}/members`),
+
+  // 🔑 Linked SSO Identities
+  getLinkedAccounts: () => api.get('/auth/linked-accounts'),
+  unlinkAccount: (provider: string) => api.delete(`/auth/linked-accounts/${provider}`),
+
+  // 🔎 Elasticsearch Diagnostics & Logs Search
+  getEsHealth: () => api.get('/es/health'),
+  validateEs: (data?: any) => api.post('/es/validate', data),
+  searchLogs: (query: string, index?: string, size?: number) => {
+    let params = `?q=${encodeURIComponent(query)}`;
+    if (index) params += `&index=${index}`;
+    if (size) params += `&size=${size}`;
+    return api.get(`/es/search-logs${params}`);
+  },
+
+  // 🛠️ Diagnostics & Utilities
+  getPlanDetails: (planId: string) => api.get(`/plans/${planId}`),
+  getBackendHealth: () => api.get('/health'),
+  getDevToken: () => api.get('/auth/dev-token'),
+  sendOtp: (email: string) => api.post('/auth/otp/send', { email }),
+  verifyOtp: (email: string, code: string) => api.post('/auth/otp/verify', { email, code }),
+
+  // ⚡ Incident Ingestion Simulation
+  ingestIncidentSim: (data: {
+    pod_name: string;
+    cluster_id?: string;
+    namespace?: string;
+    type?: string;
+    message?: string;
+    raw_logs?: string;
+    status?: string;
+  }, useV1: boolean = true) => {
+    const endpoint = useV1 ? '/v1/incidents/ingest' : '/incidents/ingest';
+    return api.post(endpoint, data);
+  },
+  getAnomalyTemplates: () => api.get('/incidents/anomaly-templates')
 };
 
 

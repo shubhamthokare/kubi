@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Bell, Shield, Database, Zap, Mail, Webhook, Clock, User, Lock, Globe, Eye, Terminal, Save, Loader2, CheckCircle2 } from 'lucide-react';
+import { Bell, Shield, Database, Zap, Mail, Webhook, Clock, User, Lock, Globe, Eye, Terminal, Save, Loader2, CheckCircle2, Briefcase, Users, Trash2 } from 'lucide-react';
 import {
   Box,
   Card,
@@ -9,6 +9,7 @@ import {
   Chip,
   Typography,
   Container,
+  Paper,
   Stack,
   Divider,
   Switch,
@@ -95,6 +96,7 @@ export default function SettingsPage() {
     namespaces: ['default'],
     scan_interval: 30,
     gemini_model: 'models/gemini-2.5-pro',
+    token_profile: 'moderate',
     gitlab_enabled: false,
     kubeconfig: '',
     gemini_api_key: '',
@@ -102,7 +104,9 @@ export default function SettingsPage() {
     gitlab_private_token: '',
     chatops_enabled: false,
     chatops_provider: 'slack',
-    chatops_webhook_url: ''
+    chatops_webhook_url: '',
+    token_quota: 100000,
+    token_usage: 0
   });
 
   // Connection Test States
@@ -115,12 +119,183 @@ export default function SettingsPage() {
   const [testingChatOps, setTestingChatOps] = useState(false);
   const [chatopsTestResult, setChatopsTestResult] = useState<{ status: 'success' | 'error' | null; message: string }>({ status: null, message: '' });
 
+  // 👥 Workspace & Teams State
+  const [workspaces, setWorkspaces] = useState<any[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>('');
+  const [newWsName, setNewWsName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('member');
+  const [wsLoading, setWsLoading] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [members, setMembers] = useState<any[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+
+  const fetchMembers = async (wsId: string) => {
+    if (!wsId) return;
+    try {
+      setMembersLoading(true);
+      const list = await kubiApi.getWorkspaceMembers(wsId);
+      setMembers(list || []);
+    } catch (error) {
+      console.error("Failed to fetch workspace members:", error);
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeWorkspaceId) {
+      fetchMembers(activeWorkspaceId);
+    }
+  }, [activeWorkspaceId]);
+
+  // 🔑 Linked SSO Identities State
+  const [linkedAccounts, setLinkedAccounts] = useState<any[]>([]);
+  const [linkedLoading, setLinkedLoading] = useState(false);
+
+  // 🔎 Elasticsearch Diagnostics State
+  const [esHealth, setEsHealth] = useState<any>(null);
+  const [esLoading, setEsLoading] = useState(false);
+  const [testingEs, setTestingEs] = useState(false);
+  const [esTestResult, setEsTestResult] = useState<{ status: 'success' | 'error' | null; message: string }>({ status: null, message: '' });
+
   // Mockup States (kept for UI completeness)
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [slackNotifications, setSlackNotifications] = useState(false);
 
+  const fetchWorkspaces = async () => {
+    try {
+      setWsLoading(true);
+      const list = await kubiApi.getWorkspaces();
+      setWorkspaces(list || []);
+      const stored = localStorage.getItem('active_workspace_id');
+      if (stored) {
+        setActiveWorkspaceId(stored);
+      } else if (list && list.length > 0) {
+        setActiveWorkspaceId(list[0].id);
+        localStorage.setItem('active_workspace_id', list[0].id);
+      }
+    } catch (error) {
+      console.error("Failed to fetch workspaces:", error);
+    } finally {
+      setWsLoading(false);
+    }
+  };
+
+  const fetchLinkedAccounts = async () => {
+    try {
+      setLinkedLoading(true);
+      const list = await kubiApi.getLinkedAccounts();
+      setLinkedAccounts(list || []);
+    } catch (error) {
+      console.error("Failed to fetch linked accounts:", error);
+    } finally {
+      setLinkedLoading(false);
+    }
+  };
+
+  const fetchEsHealth = async () => {
+    try {
+      setEsLoading(true);
+      const res = await kubiApi.getEsHealth();
+      setEsHealth(res);
+    } catch (error) {
+      console.error("Failed to fetch ES health:", error);
+      setEsHealth({ status: 'offline', message: 'Elasticsearch connection failed' });
+    } finally {
+      setEsLoading(false);
+    }
+  };
+
+  const handleCreateWorkspace = async () => {
+    if (!newWsName.trim()) return;
+    try {
+      setWsLoading(true);
+      const res = await kubiApi.createWorkspace(newWsName);
+      setNewWsName('');
+      await fetchWorkspaces();
+      
+      if (res && res.id) {
+        const switchRes = await kubiApi.switchWorkspace(res.id);
+        if (switchRes && switchRes.access_token) {
+          localStorage.setItem("access_token", switchRes.access_token);
+          localStorage.setItem("active_workspace_id", switchRes.workspace_id);
+          localStorage.removeItem("active_cluster_id");
+          window.location.reload();
+        }
+      }
+    } catch (err) {
+      console.error("Failed to create workspace:", err);
+      alert("Failed to create workspace.");
+    } finally {
+      setWsLoading(false);
+    }
+  };
+
+  const handleInviteMember = async () => {
+    if (!inviteEmail.trim() || !activeWorkspaceId) return;
+    try {
+      setInviting(true);
+      await kubiApi.inviteWorkspaceMember(activeWorkspaceId, inviteEmail, inviteRole);
+      setInviteEmail('');
+      alert(`Invitation successfully sent to ${inviteEmail}!`);
+      await fetchMembers(activeWorkspaceId);
+    } catch (err: any) {
+      console.error("Failed to invite member:", err);
+      alert(err.message || "Failed to send workspace invitation.");
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const handleRevokeMember = async (userId: string) => {
+    if (!activeWorkspaceId) return;
+    if (!confirm("Are you absolutely sure you want to revoke this user's access?")) return;
+    try {
+      await kubiApi.revokeWorkspaceMember(activeWorkspaceId, userId);
+      alert("Member access successfully revoked.");
+      await fetchMembers(activeWorkspaceId);
+    } catch (err: any) {
+      console.error("Failed to revoke member:", err);
+      alert(err.message || "Failed to revoke member access.");
+    }
+  };
+
+  const handleUnlinkAccount = async (provider: string) => {
+    if (!confirm(`Are you sure you want to disconnect your ${provider} login provider?`)) return;
+    try {
+      setLinkedLoading(true);
+      await kubiApi.unlinkAccount(provider);
+      await fetchLinkedAccounts();
+      alert(`Successfully disconnected your ${provider} credentials.`);
+    } catch (err: any) {
+      console.error("Failed to unlink account:", err);
+      alert(err.message || `Failed to disconnect your ${provider} account.`);
+    } finally {
+      setLinkedLoading(false);
+    }
+  };
+
+  const handleValidateEs = async () => {
+    try {
+      setTestingEs(true);
+      setEsTestResult({ status: null, message: '' });
+      const res = await kubiApi.validateEs();
+      setEsTestResult({ status: res.status === 'success' ? 'success' : 'error', message: res.message });
+      await fetchEsHealth();
+    } catch (err: any) {
+      console.error("Failed to validate ES:", err);
+      setEsTestResult({ status: 'error', message: err.message || 'Validation failed.' });
+    } finally {
+      setTestingEs(false);
+    }
+  };
+
   useEffect(() => {
     fetchSettings();
+    fetchWorkspaces();
+    fetchLinkedAccounts();
+    fetchEsHealth();
   }, []);
 
   const fetchSettings = async () => {
@@ -137,6 +312,7 @@ export default function SettingsPage() {
         namespaces: data.namespaces || ['default'],
         scan_interval: data.scan_interval || 30,
         gemini_model: modelVal,
+        token_profile: data.token_profile || 'moderate',
         gitlab_enabled: !!data.gitlab_enabled,
         kubeconfig: data.kubeconfig || '',
         gemini_api_key: data.gemini_api_key || '',
@@ -144,7 +320,9 @@ export default function SettingsPage() {
         gitlab_private_token: data.gitlab_private_token || '',
         chatops_enabled: !!data.chatops_enabled,
         chatops_provider: data.chatops_provider || 'slack',
-        chatops_webhook_url: data.chatops_webhook_url || ''
+        chatops_webhook_url: data.chatops_webhook_url || '',
+        token_quota: data.token_quota !== undefined ? data.token_quota : 100000,
+        token_usage: data.token_usage !== undefined ? data.token_usage : 0
       });
     } catch (error) {
       console.error("Failed to fetch settings:", error);
@@ -269,6 +447,8 @@ export default function SettingsPage() {
                 <Tab icon={<Bell size={18} />} iconPosition="start" label="Notifications" />
                 <Tab icon={<Zap size={18} />} iconPosition="start" label="AI & Automation" />
                 <Tab icon={<Database size={18} />} iconPosition="start" label="Integrations" />
+                <Tab icon={<Briefcase size={18} />} iconPosition="start" label="Workspace & Team" />
+                <Tab icon={<Lock size={18} />} iconPosition="start" label="Identity & Security" />
               </Tabs>
             </Box>
 
@@ -493,7 +673,7 @@ export default function SettingsPage() {
                     </Typography>
                     
                     <Grid container spacing={3}>
-                      <Grid size={{ xs: 12, md: 6 }}>
+                      <Grid size={{ xs: 12, md: 4 }}>
                         <FormControl fullWidth>
                           <InputLabel id="model-label" sx={{ color: 'text.secondary' }}>Gemini Model</InputLabel>
                           <Select 
@@ -512,7 +692,7 @@ export default function SettingsPage() {
                           </Select>
                         </FormControl>
                       </Grid>
-                      <Grid size={{ xs: 12, md: 6 }}>
+                      <Grid size={{ xs: 12, md: 4 }}>
                         <FormControl fullWidth>
                           <InputLabel id="interval-label" sx={{ color: 'text.secondary' }}>Scan Interval</InputLabel>
                           <Select 
@@ -526,6 +706,22 @@ export default function SettingsPage() {
                             <MenuItem value={30}>30 Seconds</MenuItem>
                             <MenuItem value={60}>1 Minute</MenuItem>
                             <MenuItem value={300}>5 Minutes</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 4 }}>
+                        <FormControl fullWidth>
+                          <InputLabel id="token-profile-label" sx={{ color: 'text.secondary' }}>Gemini Token Usage</InputLabel>
+                          <Select 
+                            labelId="token-profile-label" 
+                            value={settings.token_profile || 'moderate'} 
+                            label="Gemini Token Usage"
+                            onChange={(e) => setSettings({ ...settings, token_profile: e.target.value })}
+                            sx={{ borderRadius: 2, bgcolor: 'rgba(0,0,0,0.2)', color: 'white' }}
+                          >
+                            <MenuItem value="less">Less (Ultra-Concise, minimal tokens)</MenuItem>
+                            <MenuItem value="moderate">Moderate (Standard, optimal detail)</MenuItem>
+                            <MenuItem value="max">Max (Verbose, maximum SRE details)</MenuItem>
                           </Select>
                         </FormControl>
                       </Grid>
@@ -590,6 +786,78 @@ export default function SettingsPage() {
                       </Stack>
                       <Chip label="Enforced" size="small" color="success" variant="outlined" />
                     </Stack>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="h6" fontWeight="bold" color="white" gutterBottom>
+                      LLM Token Quota & Usage
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                      Monitor and adjust your AI token consumption quotas. If the quota is exceeded, the agent will fall back to local rule-based simulation.
+                    </Typography>
+                    
+                    <Paper sx={{ p: 3, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <Grid container spacing={3}>
+                        <Grid size={{ xs: 12, md: 8 }}>
+                          <Stack spacing={2}>
+                            <Stack direction="row" justifyContent="space-between" alignItems="center">
+                              <Typography variant="body2" color="text.secondary">Current Token Consumption</Typography>
+                              <Typography variant="body2" fontWeight="bold" color={settings.token_usage >= settings.token_quota ? '#EF4444' : '#38bdf8'}>
+                                {settings.token_usage.toLocaleString()} / {settings.token_quota.toLocaleString()} Tokens ({((settings.token_usage / Math.max(1, settings.token_quota)) * 100).toFixed(1)}%)
+                              </Typography>
+                            </Stack>
+                            
+                            <Box sx={{ width: '100%', height: 10, bgcolor: 'rgba(255,255,255,0.05)', borderRadius: 5, overflow: 'hidden', position: 'relative' }}>
+                              <Box sx={{ 
+                                width: `${Math.min(100, (settings.token_usage / Math.max(1, settings.token_quota)) * 100)}%`, 
+                                height: '100%', 
+                                bgcolor: settings.token_usage >= settings.token_quota ? '#EF4444' : '#38bdf8',
+                                borderRadius: 5,
+                                boxShadow: settings.token_usage >= settings.token_quota ? '0 0 10px rgba(239, 68, 68, 0.5)' : '0 0 10px rgba(56, 189, 248, 0.5)',
+                                transition: 'width 0.4s ease'
+                              }} />
+                            </Box>
+
+                            <Stack direction="row" spacing={4} sx={{ mt: 1 }}>
+                              <Box>
+                                <Typography variant="caption" color="text.secondary" display="block">Remaining Tokens</Typography>
+                                <Typography variant="body2" fontWeight="bold" color="white">
+                                  {Math.max(0, settings.token_quota - settings.token_usage).toLocaleString()}
+                                </Typography>
+                              </Box>
+                              <Box>
+                                <Typography variant="caption" color="text.secondary" display="block">Status</Typography>
+                                <Chip 
+                                  label={settings.token_usage >= settings.token_quota ? "QUOTA EXCEEDED" : "ACTIVE"} 
+                                  size="small" 
+                                  sx={{ 
+                                    height: 20,
+                                    fontSize: '0.65rem',
+                                    fontWeight: 'bold',
+                                    bgcolor: settings.token_usage >= settings.token_quota ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                    color: settings.token_usage >= settings.token_quota ? '#EF4444' : '#10B981',
+                                    border: settings.token_usage >= settings.token_quota ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)'
+                                  }} 
+                                />
+                              </Box>
+                            </Stack>
+                          </Stack>
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 4 }}>
+                          <TextField
+                            fullWidth
+                            label="Token Quota Limit"
+                            type="number"
+                            value={settings.token_quota}
+                            onChange={(e) => setSettings({ ...settings, token_quota: Math.max(0, Number(e.target.value)) })}
+                            variant="outlined"
+                            sx={{ 
+                              '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'rgba(0,0,0,0.2)' }
+                            }}
+                          />
+                        </Grid>
+                      </Grid>
+                    </Paper>
                   </Box>
                 </Stack>
               </CardContent>
@@ -677,18 +945,51 @@ export default function SettingsPage() {
                       </Grid>
 
                       <Grid size={{ xs: 12, md: 6 }}>
-                        <Card sx={{ bgcolor: 'rgba(255,255,255,0.02)', borderRadius: 2, border: '1px solid rgba(255,255,255,0.05)', opacity: 0.6 }}>
+                        <Card sx={{ bgcolor: 'rgba(255,255,255,0.02)', borderRadius: 2, border: '1px solid rgba(255,255,255,0.05)' }}>
                           <CardContent>
-                            <Stack direction="row" justifyContent="space-between" alignItems="center">
+                            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                               <Stack direction="row" spacing={2} alignItems="center">
                                 <Avatar sx={{ bgcolor: '#0055ff' }}>E</Avatar>
                                 <Box>
-                                  <Typography variant="body1" color="white" fontWeight="medium">Elastic Stack</Typography>
-                                  <Typography variant="caption" color="text.secondary">Coming Soon</Typography>
+                                  <Typography variant="body1" color="white" fontWeight="medium">Elasticsearch Node</Typography>
+                                  <Typography variant="caption" color={esHealth?.status === 'green' || esHealth?.status === 'yellow' ? 'success.main' : 'text.secondary'}>
+                                    {esHealth?.status ? `Status: ${esHealth.status.toUpperCase()}` : 'Not Checked'}
+                                  </Typography>
                                 </Box>
                               </Stack>
-                              <Button disabled variant="outlined" size="small" sx={{ borderRadius: 2 }}>Connect</Button>
+                              <Button 
+                                variant="outlined" 
+                                size="small" 
+                                onClick={handleValidateEs}
+                                disabled={testingEs}
+                                sx={{ borderRadius: 2, textTransform: 'none' }}
+                              >
+                                {testingEs ? <CircularProgress size={16} /> : 'Test Connection'}
+                              </Button>
                             </Stack>
+                            
+                            {esHealth?.detail && (
+                              <Box sx={{ mt: 2, p: 1.5, bgcolor: 'rgba(0,0,0,0.2)', borderRadius: 1.5 }}>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                  Node Name: {esHealth.detail.name || 'N/A'}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                  Cluster: {esHealth.detail.cluster_name || 'N/A'}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                  Version: {esHealth.detail.version?.number || 'N/A'}
+                                </Typography>
+                              </Box>
+                            )}
+
+                            {esTestResult.status && (
+                              <Alert 
+                                severity={esTestResult.status === 'success' ? 'success' : 'error'} 
+                                sx={{ mt: 2, borderRadius: 2 }}
+                              >
+                                {esTestResult.message}
+                              </Alert>
+                            )}
                           </CardContent>
                         </Card>
                       </Grid>
@@ -696,6 +997,288 @@ export default function SettingsPage() {
                   </Box>
 
 
+                </Stack>
+              </CardContent>
+            </TabPanel>
+
+            {/* Workspace & Team */}
+            <TabPanel value={tabValue} index={4}>
+              <CardContent sx={{ p: 4 }}>
+                <Stack spacing={4}>
+                  {/* Workspace Catalog */}
+                  <Box>
+                    <Typography variant="h6" fontWeight="bold" color="white" gutterBottom>
+                      Workspace Catalog
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                      Define tenant organizations and easily toggle between SRE environments.
+                    </Typography>
+
+                    <Stack spacing={2} sx={{ mb: 4 }}>
+                      {workspaces.map((ws) => (
+                        <Paper
+                          key={ws.id}
+                          sx={{
+                            p: 2.5,
+                            bgcolor: 'rgba(255,255,255,0.01)',
+                            border: ws.id === activeWorkspaceId ? '1px solid #a78bfa' : '1px solid rgba(255,255,255,0.05)',
+                            boxShadow: ws.id === activeWorkspaceId ? '0 0 12px rgba(167, 139, 250, 0.1)' : 'none',
+                            borderRadius: 2,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <Stack direction="row" spacing={2} alignItems="center">
+                            <Briefcase size={18} style={{ color: '#a78bfa' }} />
+                            <Box>
+                              <Typography variant="subtitle2" fontWeight="bold" color="white">{ws.name}</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Role: <Chip label={ws.role.toUpperCase()} size="small" color={ws.role === 'owner' ? 'secondary' : 'default'} sx={{ height: 16, fontSize: '0.65rem', fontWeight: 'bold' }} />
+                              </Typography>
+                            </Box>
+                          </Stack>
+                          {ws.id === activeWorkspaceId && (
+                            <Chip label="ACTIVE" size="small" color="primary" variant="filled" sx={{ fontWeight: 'bold', height: 22 }} />
+                          )}
+                        </Paper>
+                      ))}
+                    </Stack>
+
+                    <Divider sx={{ mb: 3, borderColor: 'rgba(255,255,255,0.05)' }} />
+
+                    {/* Create Workspace */}
+                    <Typography variant="subtitle2" color="white" fontWeight="bold" sx={{ mb: 1, display: 'block' }}>
+                      Create Workspace
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, md: 8 }}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="New Workspace Name"
+                          placeholder="e.g. Production Cluster Workspace"
+                          value={newWsName}
+                          onChange={(e) => setNewWsName(e.target.value)}
+                          variant="outlined"
+                          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'rgba(0,0,0,0.2)' } }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 4 }}>
+                        <Button
+                          fullWidth
+                          variant="contained"
+                          color="secondary"
+                          onClick={handleCreateWorkspace}
+                          disabled={wsLoading || !newWsName.trim()}
+                          sx={{ height: 40, borderRadius: 2, textTransform: 'none', fontWeight: 'bold' }}
+                        >
+                          {wsLoading ? <CircularProgress size={20} /> : 'Create Workspace'}
+                        </Button>
+                      </Grid>
+                    </Grid>
+                  </Box>
+
+                  {/* Team Members Directory */}
+                  <Box>
+                    <Typography variant="h6" fontWeight="bold" color="white" gutterBottom>
+                      Workspace Collaborators
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                      Invite SRE peers to collaborate on your clusters and coordinate automated mitigations.
+                    </Typography>
+
+                    {/* Invite Collaborator Card */}
+                    <Paper sx={{ p: 3, bgcolor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 2.5, mb: 3 }}>
+                      <Typography variant="subtitle2" color="white" fontWeight="bold" sx={{ mb: 2, display: 'block' }}>
+                        Invite SRE Member
+                      </Typography>
+                      <Grid container spacing={2} alignItems="center">
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Email Address"
+                            type="email"
+                            placeholder="sre-colleague@company.com"
+                            value={inviteEmail}
+                            onChange={(e) => setInviteEmail(e.target.value)}
+                            variant="outlined"
+                            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'rgba(0,0,0,0.2)' } }}
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 3 }}>
+                          <FormControl size="small" fullWidth>
+                            <Select
+                              value={inviteRole}
+                              onChange={(e) => setInviteRole(e.target.value)}
+                              sx={{ borderRadius: 2, bgcolor: 'rgba(0,0,0,0.2)', color: 'white' }}
+                            >
+                              <MenuItem value="admin">Admin (Read + Write)</MenuItem>
+                              <MenuItem value="member">Member (Read + Write)</MenuItem>
+                              <MenuItem value="viewer">Viewer (Read Only)</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 3 }}>
+                          <Button
+                            fullWidth
+                            variant="contained"
+                            onClick={handleInviteMember}
+                            disabled={inviting || !inviteEmail.trim()}
+                            sx={{ height: 40, borderRadius: 2, textTransform: 'none', fontWeight: 'bold' }}
+                          >
+                            {inviting ? <CircularProgress size={20} /> : 'Send Invite'}
+                          </Button>
+                        </Grid>
+                      </Grid>
+                    </Paper>
+
+                    {/* Collaborators List */}
+                    <Typography variant="subtitle2" color="white" fontWeight="bold" sx={{ mb: 2, display: 'block' }}>
+                      Collaborator Directory
+                    </Typography>
+
+                    {membersLoading ? (
+                      <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
+                        <CircularProgress size={24} color="secondary" />
+                      </Box>
+                    ) : members.length === 0 ? (
+                      <Alert severity="info" sx={{ borderRadius: 2 }}>
+                        No collaborators found for this workspace.
+                      </Alert>
+                    ) : (
+                      <Stack spacing={2}>
+                        {members.map((member) => (
+                          <Paper
+                            key={member.user_id}
+                            sx={{
+                              p: 2,
+                              bgcolor: 'rgba(255,255,255,0.01)',
+                              border: '1px solid rgba(255,255,255,0.05)',
+                              borderRadius: 2,
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <Stack direction="row" spacing={2} alignItems="center">
+                              <Avatar sx={{ bgcolor: 'rgba(167, 139, 250, 0.1)', color: '#a78bfa' }}>
+                                <User size={18} />
+                              </Avatar>
+                              <Box>
+                                <Typography variant="subtitle2" fontWeight="bold" color="white">
+                                  {member.name}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {member.email}
+                                </Typography>
+                              </Box>
+                            </Stack>
+                            <Stack direction="row" spacing={2} alignItems="center">
+                              <Chip
+                                label={member.role.toUpperCase()}
+                                size="small"
+                                color={
+                                  member.role === 'owner' ? 'secondary' :
+                                  member.role === 'admin' ? 'primary' :
+                                  'default'
+                                }
+                                sx={{ fontWeight: 'bold', height: 20, fontSize: '0.65rem' }}
+                              />
+                              {member.role !== 'owner' && (
+                                <Button
+                                  variant="text"
+                                  color="error"
+                                  size="small"
+                                  onClick={() => handleRevokeMember(member.user_id)}
+                                  sx={{ minWidth: 'auto', p: 0.75, borderRadius: 1.5 }}
+                                >
+                                  <Trash2 size={16} />
+                                </Button>
+                              )}
+                            </Stack>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    )}
+                  </Box>
+                </Stack>
+              </CardContent>
+            </TabPanel>
+
+            {/* Identity & Security */}
+            <TabPanel value={tabValue} index={5}>
+              <CardContent sx={{ p: 4 }}>
+                <Stack spacing={4}>
+                  <Box>
+                    <Typography variant="h6" fontWeight="bold" color="white" gutterBottom>
+                      SSO Connected Identities
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                      Connect or disconnect single sign-on profiles linked to your SRE workspace account.
+                    </Typography>
+
+                    {linkedLoading ? (
+                      <Box sx={{ py: 4, textDecoration: 'center' }}>
+                        <CircularProgress size={24} />
+                      </Box>
+                    ) : linkedAccounts.length === 0 ? (
+                      <Alert severity="info" sx={{ borderRadius: 2 }}>
+                        No external SSO providers (GitLab, Google) are currently connected.
+                      </Alert>
+                    ) : (
+                      <Stack spacing={2.5}>
+                        {linkedAccounts.map((acct) => (
+                          <Paper
+                            key={acct.provider}
+                            sx={{
+                              p: 2.5,
+                              bgcolor: 'rgba(255,255,255,0.01)',
+                              border: '1px solid rgba(255,255,255,0.05)',
+                              borderRadius: 2,
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <Stack direction="row" spacing={2} alignItems="center">
+                              <Avatar sx={{ bgcolor: acct.provider === 'gitlab' ? '#e24329' : acct.provider === 'google' ? '#ea4335' : '#1e293b' }}>
+                                {acct.provider.charAt(0).toUpperCase()}
+                              </Avatar>
+                              <Box>
+                                <Typography variant="subtitle2" fontWeight="bold" color="white">
+                                  {acct.provider.toUpperCase()} Identity Binding
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  Email: {acct.email || 'Linked Account'}
+                                </Typography>
+                              </Box>
+                            </Stack>
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              size="small"
+                              onClick={() => handleUnlinkAccount(acct.provider)}
+                              sx={{ borderRadius: 1.5, textTransform: 'none', fontWeight: 'bold' }}
+                            >
+                              Disconnect
+                            </Button>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    )}
+                  </Box>
+
+                  <Box>
+                    <Typography variant="h6" fontWeight="bold" color="white" gutterBottom>
+                      Operator Tokens & Safes
+                    </Typography>
+                    <Divider sx={{ my: 2, borderColor: 'rgba(255,255,255,0.05)' }} />
+                    <Alert severity="warning" sx={{ bgcolor: 'rgba(239, 68, 68, 0.03)', border: '1px solid rgba(239, 68, 68, 0.15)', color: '#fca5a5', borderRadius: 2 }}>
+                      Keep SRE JWT tokens secure. Regenerating authentication signatures updates active scopes on GKE, GitLab integrations, and Prometheus alert telemetry hooks globally.
+                    </Alert>
+                  </Box>
                 </Stack>
               </CardContent>
             </TabPanel>

@@ -5,12 +5,13 @@ Copyright (c) 2026 Kubi AI Authors
 Licensed under the MIT License
 
 Provides a WebSocket endpoint that streams live container logs directly
-from Kubernetes to the frontend dashboard. Uses asyncio subprocess to
-run `kubectl logs --follow` and pipes output to the WS client.
+from Kubernetes to the frontend dashboard. Uses the Kubernetes Python SDK
+to watch namespaced pod logs and streams them to the WS client safely.
 """
 
 import asyncio
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from app.core.auth import decode_jwt_token
@@ -27,7 +28,7 @@ async def stream_pod_logs(
     pod: str = Query(..., description="Pod name"),
     namespace: str = Query("default", description="Kubernetes namespace"),
     token: str = Query(..., description="JWT Bearer token"),
-    container: str = Query(None, description="Container name (optional)"),
+    container: Optional[str] = Query(None, description="Container name (optional)"),
     tail: int = Query(100, description="Number of previous log lines to show on connect"),
 ):
     """
@@ -43,54 +44,75 @@ async def stream_pod_logs(
     # ── 1. Authenticate ──────────────────────────────────────────────────
     try:
         decode_jwt_token(token, settings.JWT_SECRET_KEY)
-    except ValueError as e:
+    except Exception as e:
+        print("WEB_SOCKET AUTHENTICATION FAILED:", e)
         await websocket.close(code=4001, reason=f"Unauthorized: {e}")
         return
 
     await websocket.accept()
     logger.info(f"WebSocket log stream opened: {namespace}/{pod} (container={container})")
 
-    # ── 2. Build kubectl command ─────────────────────────────────────────
-    cmd = [
-        "kubectl", "logs",
-        "--follow",
-        f"--tail={tail}",
-        "--namespace", namespace,
-        pod,
-    ]
-    if container:
-        cmd += ["--container", container]
-
-    # ── 3. Stream logs ───────────────────────────────────────────────────
-    process = None
+    # ── 2. Initialize Kubernetes SDK ─────────────────────────────────────
+    from kubernetes import client, config
     try:
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        config.load_incluster_config()
+    except Exception:
+        try:
+            config.load_kube_config()
+        except Exception as e:
+            print("WEB_SOCKET KUBERNETES CONFIG LOAD FAILED:", e)
+            logger.error(f"Failed to load Kubernetes config: {e}")
+            await websocket.send_json({"type": "error", "message": f"Failed to load Kubernetes config: {e}"})
+            await websocket.close()
+            return
 
-        async def _send_stderr():
-            """Forward stderr (e.g. pod-not-found errors) to the client."""
-            if process.stderr:
-                async for line in process.stderr:
-                    text = line.decode("utf-8", errors="replace").rstrip()
-                    if text:
-                        await websocket.send_text(f"[stderr] {text}\n")
+    v1 = client.CoreV1Api()
+    loop = asyncio.get_running_loop()
+    resp = None
 
-        asyncio.create_task(_send_stderr())
+    # ── 3. Streaming Worker in Background Thread ─────────────────────────
+    def blocking_log_stream():
+        nonlocal resp
+        kwargs = {
+            "name": pod,
+            "namespace": namespace,
+            "follow": True,
+            "tail_lines": tail,
+            "_preload_content": False,
+        }
+        if container:
+            kwargs["container"] = container
 
-        # Stream stdout line by line
-        if process.stdout:
-            async for line in process.stdout:
-                text = line.decode("utf-8", errors="replace")
-                await websocket.send_text(text)
+        try:
+            resp = v1.read_namespaced_pod_log(**kwargs)
+            
+            while True:
+                line = resp.readline()
+                if not line:
+                    break
+                    
+                event = line.decode("utf-8", errors="replace")
+                # Send log line to client via the main event loop
+                asyncio.run_coroutine_threadsafe(
+                    websocket.send_text(event),
+                    loop
+                )
+        except Exception as e:
+            # Watch stopped or failed
+            print("BLOCKING STREAM EXCEPTION:", e)
+            logger.error(f"Blocking stream finished/aborted: {e}")
 
+    # Start the blocking stream in a background thread
+    stream_task = loop.run_in_executor(None, blocking_log_stream)
+
+    try:
+        # Keep connection open and await the stream task or client disconnect
+        await stream_task
         # Signal clean EOF
         await websocket.send_json({"type": "eof", "message": "Log stream ended."})
 
     except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected: {namespace}/{pod}")
+        logger.info(f"WebSocket disconnected by client: {namespace}/{pod}")
     except Exception as e:
         logger.warning(f"WebSocket log stream error for {namespace}/{pod}: {e}")
         try:
@@ -98,10 +120,11 @@ async def stream_pod_logs(
         except Exception:
             pass
     finally:
-        if process and process.returncode is None:
+        # ── 4. Graceful Cleanup ──────────────────────────────────────────
+        if resp:
             try:
-                process.kill()
-                await process.wait()
+                resp.close()
+                resp.release_conn()
             except Exception:
                 pass
         try:

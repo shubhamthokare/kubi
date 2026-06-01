@@ -22,6 +22,7 @@ class IncidentResponse(BaseModel):
     status: Optional[str] = None
     pod: Optional[Dict[str, Any]] = None
     cluster_id: Optional[str] = None
+    connection_id: Optional[str] = None
     first_detected: Optional[str] = None
     last_seen: Optional[str] = None
     resolved_at: Optional[str] = None
@@ -29,6 +30,7 @@ class IncidentResponse(BaseModel):
     plan_id: Optional[str] = None
     plan_summary: Optional[str] = None
     postmortem: Optional[str] = None
+    tokens_consumed: Optional[int] = 0
 
 class IncidentListResponse(BaseModel):
     incidents: List[Dict[str, Any]]  # Allowing generic dict for flexibility if incidents vary
@@ -37,6 +39,7 @@ class IncidentIngestRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
     pod_name: str
     cluster_id: Optional[str] = None
+    connection_id: Optional[str] = None
     namespace: Optional[str] = "default"
     type: Optional[str] = None
     message: Optional[str] = None
@@ -66,6 +69,10 @@ class PlanResponse(BaseModel):
     status: str
     plan: Optional[Dict[str, Any]] = None
     generated_by: Optional[str] = "ai"
+    tokens_consumed: Optional[int] = 0
+    cluster_id: Optional[str] = None
+    pod_name: Optional[str] = None
+    namespace: Optional[str] = None
 
 class PlanListResponse(BaseModel):
     plans: List[Dict[str, Any]]
@@ -131,12 +138,16 @@ class ClusterConfig(BaseModel):
     kubeconfig: Optional[str] = None
     namespace: Optional[str] = None
     org: Optional[str] = "kubi-org"
+    agent_cluster_id: Optional[str] = None
 
 class SettingsBase(BaseModel):
     model_config = ConfigDict(extra="ignore")
     namespaces: Optional[List[str]] = ["default"]
     scan_interval: Optional[int] = 30
     gemini_model: Optional[str] = "gemini-2.5-pro"
+    token_profile: Optional[str] = "moderate"   # "less" | "moderate" | "max"
+    token_quota: Optional[int] = 100000
+    token_usage: Optional[int] = 0
     gitlab_enabled: Optional[bool] = False
     kubeconfig: Optional[str] = ""
     gitlab_api_url: Optional[str] = ""
@@ -187,6 +198,9 @@ class ValidateClusterRequest(BaseModel):
     agent_url: Optional[str] = None
     api_endpoint: Optional[str] = None
     kubeconfig: Optional[str] = None
+    ca_cert: Optional[str] = None
+    client_cert: Optional[str] = None
+    client_key: Optional[str] = None
 
 class ESValidateRequest(BaseModel):
     host: Optional[str] = None
@@ -217,7 +231,7 @@ class ESHealthResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
     status: str
     cluster_name: Optional[str] = None
-    indices: Optional[List[str]] = None
+    indices: Optional[Dict[str, Any]] = None
     documents: Optional[int] = None
     host: Optional[str] = None
     message: Optional[str] = None
@@ -293,6 +307,31 @@ class WorkspaceMember(BaseModel):
 class CreateWorkspaceRequest(BaseModel):
     name: str
 
+class UpdateWorkspaceRequest(BaseModel):
+    name: str
+
 class InviteMemberRequest(BaseModel):
     email: str
     role: str
+
+# -------------------------------------------------------------
+# Playbook Models
+# -------------------------------------------------------------
+class PlaybookCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    script_type: str  # "yaml_manifest" or "python_script"
+    content: str
+
+class PlaybookResponse(BaseModel):
+    playbook_id: str
+    name: str
+    description: Optional[str] = None
+    script_type: str
+    content: str
+    created_at: str
+    updated_at: str
+
+class PlaybookListResponse(BaseModel):
+    playbooks: List[PlaybookResponse]
+

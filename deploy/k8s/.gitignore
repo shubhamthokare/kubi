@@ -1,1 +1,5 @@
-secrets/
+secrets/local/.env
+secrets/local/*.private.env
+secrets/local/local.env.private
+secrets/external/gcp/*.json
+secrets/external/gcp/*.private.env

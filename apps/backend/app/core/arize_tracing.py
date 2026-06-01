@@ -15,18 +15,57 @@ import logging
 from typing import Optional
 
 try:
-    from arize.otel import register
-    from openinference.instrumentation.google_genai import GoogleGenAIInstrumentor
     from opentelemetry import trace
-    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-    from opentelemetry.instrumentation.requests import RequestsInstrumentor
-    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
     from opentelemetry.sdk.trace import TracerProvider
     HAS_OTEL = True
 except ImportError:
     HAS_OTEL = False
+
+GoogleGenAIInstrumentor = None
+FastAPIInstrumentor = None
+RequestsInstrumentor = None
+HTTPXClientInstrumentor = None
+
+HAS_GEMINI_INSTRUMENTOR = False
+if HAS_OTEL:
+    try:
+        from openinference.instrumentation.google_genai import GoogleGenAIInstrumentor
+        HAS_GEMINI_INSTRUMENTOR = True
+    except ImportError:
+        pass
+
+HAS_FASTAPI_INSTRUMENTOR = False
+if HAS_OTEL:
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        HAS_FASTAPI_INSTRUMENTOR = True
+    except ImportError:
+        pass
+
+HAS_HTTP_INSTRUMENTORS = False
+if HAS_OTEL:
+    try:
+        from opentelemetry.instrumentation.requests import RequestsInstrumentor
+        from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+        HAS_HTTP_INSTRUMENTORS = True
+    except ImportError:
+        pass
+
+try:
+    from arize.otel import register
+    HAS_ARIZE = True
+except ImportError:
+    HAS_ARIZE = False
+
+if not HAS_OTEL:
     class TracerProvider:  # type: ignore
         pass
+    class DummyContextManager:
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            return False
+
     class trace:  # type: ignore
         @staticmethod
         def set_tracer_provider(provider):
@@ -34,7 +73,10 @@ except ImportError:
         @staticmethod
         def get_tracer(name: str):
             class DummyTracer:
-                pass
+                def start_as_current_span(self, name, *args, **kwargs):
+                    return DummyContextManager()
+                def start_span(self, name, *args, **kwargs):
+                    return DummyContextManager()
             return DummyTracer()
 
 logger = logging.getLogger(__name__)
@@ -103,7 +145,7 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
         TracerProvider if successfully initialized, None if unconfigured or failed.
     """
     if not HAS_OTEL:
-        logger.info("Arize tracing is inactive (OpenTelemetry libraries not installed).")
+        logger.info("Arize/OTel tracing is inactive (OpenTelemetry libraries not installed).")
         return None
     
     environment = os.getenv("ENVIRONMENT", "").lower()
@@ -128,11 +170,14 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
                 "local collector endpoints (PHOENIX_COLLECTOR_ENDPOINT) are set."
             )
         else:
-            logger.info("Arize tracing is inactive (unconfigured).")
+            logger.info("Arize/OTel tracing is inactive (unconfigured).")
         return None
         
     try:
         if is_cloud_ready:
+            if not HAS_ARIZE:
+                logger.error("Arize Cloud mode requested but arize-otel package is not installed.")
+                return None
             logger.info(f"Initializing Arize Cloud tracing (Project: {project_name})...")
             tracer_provider = register(
                 space_id=space_id,
@@ -140,45 +185,60 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
                 project_name=project_name,
             )
         else:
-            logger.info(f"Initializing local Arize Phoenix/OTLP tracing to '{phoenix_endpoint}'...")
-            
-            # Determine appropriate transport (HTTP for standard port 6006 or 4318, otherwise gRPC)
-            try:
-                from arize.otel import Transport
-                transport_val = Transport.HTTP if any(p in phoenix_endpoint for p in ["6006", "4318", "v1/traces"]) else Transport.GRPC
-            except Exception:
-                transport_val = None
+            if HAS_ARIZE:
+                logger.info(f"Initializing local Arize Phoenix/OTLP tracing to '{phoenix_endpoint}'...")
                 
-            register_kwargs = {
-                "project_name": project_name,
-                "endpoint": phoenix_endpoint,
-            }
-            if transport_val is not None:
-                register_kwargs["transport"] = transport_val
-                
-            tracer_provider = register(**register_kwargs)
+                try:
+                    from arize.otel import Transport
+                    transport_val = Transport.HTTP if any(p in phoenix_endpoint for p in ["6006", "4318", "v1/traces"]) else Transport.GRPC
+                except Exception:
+                    transport_val = None
+                    
+                register_kwargs = {
+                    "project_name": project_name,
+                    "endpoint": phoenix_endpoint,
+                }
+                if transport_val is not None:
+                    register_kwargs["transport"] = transport_val
+                    
+                tracer_provider = register(**register_kwargs)
+            else:
+                logger.info(f"Initializing standard local OpenTelemetry tracing to '{phoenix_endpoint}' (arize-otel not installed)...")
+                try:
+                    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+                    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+                    
+                    tracer_provider = TracerProvider()
+                    otlp_exporter = OTLPSpanExporter(endpoint=phoenix_endpoint)
+                    tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+                except ImportError:
+                    logger.warning("Standard OTLP exporter not installed; falling back to simple TracerProvider.")
+                    tracer_provider = TracerProvider()
         
         # Instrument Google Gemini
-        GoogleGenAIInstrumentor().instrument(tracer_provider=tracer_provider)
-        logger.info("✓ Arize tracing initialized for Google Gemini")
-        
+        if HAS_GEMINI_INSTRUMENTOR:
+            GoogleGenAIInstrumentor().instrument(tracer_provider=tracer_provider)
+            logger.info("✓ Arize/OTel tracing initialized for Google Gemini")
+            
         # Instrument FastAPI (will capture HTTP requests/responses)
-        FastAPIInstrumentor().instrument()
-        logger.info("✓ Arize tracing initialized for FastAPI")
-        
+        if HAS_FASTAPI_INSTRUMENTOR:
+            FastAPIInstrumentor().instrument()
+            logger.info("✓ Arize/OTel tracing initialized for FastAPI")
+            
         # Instrument HTTP clients
-        RequestsInstrumentor().instrument()
-        HTTPXClientInstrumentor().instrument()
-        logger.info("✓ Arize tracing initialized for HTTP clients (requests, httpx)")
-        
+        if HAS_HTTP_INSTRUMENTORS:
+            RequestsInstrumentor().instrument()
+            HTTPXClientInstrumentor().instrument()
+            logger.info("✓ Arize/OTel tracing initialized for HTTP clients (requests, httpx)")
+            
         # Set global tracer provider for custom spans
         trace.set_tracer_provider(tracer_provider)
         
-        logger.info(f"✅ Arize AX/Phoenix tracing fully initialized (Project: {project_name})")
+        logger.info(f"✅ Arize/OTel tracing fully initialized (Project: {project_name})")
         return tracer_provider
         
     except Exception as e:
-        logging.exception(f"Failed to initialize Arize tracing: {e}", exc_info=True)
+        logging.exception(f"Failed to initialize Arize/OTel tracing: {e}", exc_info=True)
         return None
 
 

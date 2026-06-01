@@ -5,6 +5,6 @@ metadata:
   namespace: kubi
 data:
   KUBI_BACKEND_URL: "http://kubi-backend-service:8000" # URL of the main Kubi backend cluster.
-  CLUSTER_ID: "remote-cluster-1"
+  CLUSTER_ID: "auto"
   TARGET_NAMESPACE: "default"
   SCAN_INTERVAL: "30"

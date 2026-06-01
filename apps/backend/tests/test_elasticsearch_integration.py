@@ -119,7 +119,9 @@ class TestElasticsearchIntegration(unittest.IsolatedAsyncioTestCase):
     @patch('app.services.elasticsearch_service.is_available')
     @patch('app.services.elasticsearch_service.search_similar_incidents')
     @patch('app.db.database.get_db')
-    async def test_gemini_rag_context_elasticsearch(self, mock_get_db, mock_es_search, mock_is_available):
+    @patch('app.services.gemini_service.GeminiService._get_token_profile')
+    async def test_gemini_rag_context_elasticsearch(self, mock_get_token_profile, mock_get_db, mock_es_search, mock_is_available):
+        mock_get_token_profile.return_value = "moderate"
         mock_is_available.return_value = True
         mock_es_search.return_value = [
             {
@@ -141,7 +143,9 @@ class TestElasticsearchIntegration(unittest.IsolatedAsyncioTestCase):
 
     @patch('app.services.elasticsearch_service.is_available')
     @patch('app.db.database.get_db')
-    async def test_gemini_rag_context_mongodb_fallback(self, mock_get_db, mock_is_available):
+    @patch('app.services.gemini_service.GeminiService._get_token_profile')
+    async def test_gemini_rag_context_mongodb_fallback(self, mock_get_token_profile, mock_get_db, mock_is_available):
+        mock_get_token_profile.return_value = "moderate"
         mock_is_available.return_value = False
         
         # Mock MongoDB find results

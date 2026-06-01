@@ -134,7 +134,7 @@ ELASTICSEARCH_INDEX=kubi-incidents
 
 # Observability (Arize)
 ARIZE_SPACE_ID=your-space-id
-ARIZE_API_KEY=your-api-key
+ARIZE_API_KEY=dummy
 ```
 
 ⚠️ **Security**: Never commit `.env` to git. Use `.env.example` for documentation.
@@ -192,7 +192,7 @@ docker build -t kubi-backend:latest .
 docker run -d \
   -p 8000:8000 \
   -e MONGODB_URL=mongodb://mongodb:27017 \
-  -e GEMINI_API_KEY=your-key \
+  -e GEMINI_API_KEY=dummy \
   --name kubi-backend \
   kubi-backend:latest
 ```

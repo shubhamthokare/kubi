@@ -29,6 +29,14 @@ from app.core.arize_tracing import (
 )
 
 class TestArizeTracing(unittest.TestCase):
+    def setUp(self):
+        import app.core.arize_tracing
+        app.core.arize_tracing.HAS_OTEL = True
+        app.core.arize_tracing.HAS_ARIZE = True
+        app.core.arize_tracing.HAS_GEMINI_INSTRUMENTOR = True
+        app.core.arize_tracing.HAS_FASTAPI_INSTRUMENTOR = True
+        app.core.arize_tracing.HAS_HTTP_INSTRUMENTORS = True
+
     def test_sanitize_headers(self):
         # 1. Test None or empty headers
         self.assertIsNone(_sanitize_headers(None))

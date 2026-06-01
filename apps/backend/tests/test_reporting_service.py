@@ -28,7 +28,7 @@ class TestReportingService(unittest.IsolatedAsyncioTestCase):
         
         self.assertEqual(report, "# Test Report Content")
         self.mock_gemini.generate_postmortem.assert_called_once_with(incident_data)
-        self.service.save_report.assert_called_once_with("incident-123", "plan-456", "# Test Report Content")
+        self.service.save_report.assert_called_once_with("incident-123", "plan-456", "# Test Report Content", 0)
 
     def test_save_report_structure(self):
         # Placeholder for save_report test

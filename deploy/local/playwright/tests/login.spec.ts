@@ -1,5 +1,10 @@
 import { test, expect, request } from '@playwright/test';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
 import { MongoClient } from 'mongodb';
+
+// Load environment variables from the .env file in the same folder
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 /**
  * Helper to fetch the latest OTP for a given email directly from MongoDB.
@@ -46,13 +51,13 @@ test('register → verify → login user flow', async ({ request }) => {
   // -------------------------------------------------
   // 2. Retrieve the OTP from the database
   // -------------------------------------------------
-  const otp = '123456'; // dummy OTP for test environment
+  const otp = await getLatestOtp(email);
   expect(otp).not.toBe('');
 
   // -------------------------------------------------
   // 3. Verify email with OTP
   // -------------------------------------------------
-  const verifyRes = await request.post(`${baseUrl}/auth/verify-email`, {
+  const verifyRes = await request.post(`${baseUrl}/api/auth/verify-email`, {
     data: { email, code: otp },
     headers: { 'Content-Type': 'application/json' },
   });

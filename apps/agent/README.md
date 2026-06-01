@@ -71,7 +71,7 @@ kubectl config current-context
 
 # 2. Set environment variables
 export KUBI_BACKEND_URL=http://localhost:8000
-export GEMINI_API_KEY=your-key-here
+export GEMINI_API_KEY=dummy
 
 # 3. Run agent
 python main.py
@@ -137,7 +137,7 @@ LOG_LEVEL=INFO                              # INFO, DEBUG, WARNING, ERROR
 
 # Observability (Arize)
 ARIZE_SPACE_ID=your-space-id
-ARIZE_API_KEY=your-api-key
+ARIZE_API_KEY=dummy
 ARIZE_PROJECT_NAME=kubi-agent
 ```
 
@@ -309,7 +309,7 @@ docker build -t kubi-agent:latest .
 ```bash
 docker run -d \
   -e KUBI_BACKEND_URL=http://host.docker.internal:8000 \
-  -e GEMINI_API_KEY=your-key \
+  -e GEMINI_API_KEY=dummy \
   -v ~/.kube:/root/.kube \
   --name kubi-agent \
   kubi-agent:latest

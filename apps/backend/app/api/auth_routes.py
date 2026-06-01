@@ -176,11 +176,13 @@ async def login_credentials(payload: LoginRequest):
         
     org = "kubi-org"
     if "@" in email_lower:
-        org = email_lower.split("@")[-1].strip()
+        domain = email_lower.split("@")[-1].strip()
+        if domain not in ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com", "protonmail.com", "aol.com", "example.com"]:
+            org = domain
         
     # Generate secure JWT access token
     token = create_access_token(
-        username=user_doc["name"],
+        username=user_doc["email"],
         role=workspace_role,
         org=org,
         scopes=scopes,
@@ -270,11 +272,13 @@ async def verify_email(payload: VerifyEmailRequest):
         
     org = "kubi-org"
     if "@" in email_lower:
-        org = email_lower.split("@")[-1].strip()
+        domain = email_lower.split("@")[-1].strip()
+        if domain not in ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com", "protonmail.com", "aol.com", "example.com"]:
+            org = domain
         
     # Generate secure JWT access token
     token = create_access_token(
-        username=user_doc["name"],
+        username=user_doc["email"],
         role=workspace_role,
         org=org,
         scopes=scopes,
@@ -323,24 +327,30 @@ async def dev_token(
 # Google login endpoint removed
 
 @router.get("/linked-accounts", dependencies=[Depends(rate_limit(5))])
-async def get_linked_accounts(current_user=Depends(get_current_user_with_scope(["sre:read"]))):
+async def get_linked_accounts(current_user=Depends(get_current_user_with_scope("sre:read"))):
     """Return the list of linked OAuth provider accounts for the authenticated user.
     The endpoint is protected by JWT scope `sre:read`.
     """
     db = get_db()
+    email = current_user.get("sub")
+    user = await db["users"].find_one({"email": email.lower().strip() if email else ""})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
     oauth_coll = db["oauth_accounts"]
     # Retrieve all oauth accounts for this user.
-    accounts_cursor = await oauth_coll.find({"user_id": current_user.id})
-    accounts = await accounts_cursor.to_list()
+    accounts_cursor = oauth_coll.find({"user_id": user["_id"]})
+    accounts = await accounts_cursor.to_list(length=None)
     # Serialize ObjectId fields to strings for JSON response.
     result = []
     for acc in accounts:
         result.append({
             "provider": acc.get("provider"),
             "email": acc.get("email"),
-            "created_at": acc.get("created_at"),
+            "created_at": str(acc.get("created_at")) if acc.get("created_at") else None,
         })
     return result
+
 
 # SSO callback endpoint removed
 # ---------------------------------------------------------------------
@@ -348,7 +358,7 @@ async def get_linked_accounts(current_user=Depends(get_current_user_with_scope([
 @router.delete("/linked-accounts/{provider}", dependencies=[Depends(rate_limit(5))])
 async def delete_linked_account(
     provider: str,
-    current_user=Depends(get_current_user_with_scope(["sre:read"]))
+    current_user=Depends(get_current_user_with_scope("sre:read"))
 ):
     """Delete a linked OAuth provider account.
 
@@ -357,17 +367,18 @@ async def delete_linked_account(
     - Returns a success status on successful deletion.
     """
     db = get_db()
+    email = current_user.get("sub")
+    user_doc = await db["users"].find_one({"email": email.lower().strip() if email else ""})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found.")
+        
     oauth_coll = db["oauth_accounts"]
     # Find the specific linked account
-    account = await oauth_coll.find_one({"user_id": current_user.id, "provider": provider})
+    account = await oauth_coll.find_one({"user_id": user_doc["_id"], "provider": provider})
     if not account:
         raise HTTPException(status_code=404, detail="Linked account not found.")
     # Count total linked accounts for the user
-    accounts = await oauth_coll.find({"user_id": current_user.id}).to_list()
-    # Retrieve user document to check if a password is set
-    user_doc = await db["users"].find_one({"_id": current_user.id})
-    if not user_doc:
-        raise HTTPException(status_code=404, detail="User not found.")
+    accounts = await oauth_coll.find({"user_id": user_doc["_id"]}).to_list(length=None)
     # If only one linked account exists and the user has no password, block deletion
     if len(accounts) == 1 and not user_doc.get("hashed_password"):
         raise HTTPException(
@@ -377,6 +388,7 @@ async def delete_linked_account(
     # Perform deletion
     await oauth_coll.delete_one({"_id": account["_id"]})
     return {"status": "success"}
+
 # ---------------------------------------------------------------------
 
 class ForgotPasswordRequest(BaseModel):
@@ -387,7 +399,7 @@ class ResetPasswordRequest(BaseModel):
     code: str
     new_password: str
 
-@router.post("/forgot-password", dependencies=[Depends(rate_limit(10))])
+@router.post("/forgot-password", dependencies=[Depends(rate_limit(50))])
 async def forgot_password(payload: ForgotPasswordRequest):
     db = get_db()
     email_lower = payload.email.lower().strip()
@@ -410,7 +422,7 @@ async def forgot_password(payload: ForgotPasswordRequest):
         
     return generic_response
 
-@router.post("/reset-password", dependencies=[Depends(rate_limit(10))])
+@router.post("/reset-password", dependencies=[Depends(rate_limit(50))])
 async def reset_password(payload: ResetPasswordRequest):
     email_lower = payload.email.lower().strip()
     
@@ -439,14 +451,19 @@ async def reset_password(payload: ResetPasswordRequest):
         "message": "Password reset successfully."
     }
 
-@router.delete("/delete-account", dependencies=[Depends(rate_limit(10))])
+@router.delete("/delete-account", dependencies=[Depends(rate_limit(50))])
 async def delete_account(current_user: dict = Depends(get_current_user_with_scope("sre:write"))):
     db = get_db()
     email = current_user.get("sub")
     if not email:
         raise HTTPException(status_code=401, detail="Invalid token payload")
         
-    user = await db["users"].find_one({"email": email.lower()})
+    user = await db["users"].find_one({
+        "$or": [
+            {"email": email.lower()},
+            {"name": email}
+        ]
+    })
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
         

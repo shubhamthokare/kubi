@@ -60,5 +60,25 @@ def rate_limit(limit: int, window: int = 60):
             ip = x_forwarded_for.split(",")[0].strip()
         else:
             ip = request.headers.get("x-real-ip") or (request.client.host if request.client else "127.0.0.1")
-        rate_limiter.check_rate_limit(ip, limit, window)
+        
+        # Check if the user is an admin or owner to raise the limit
+        adjusted_limit = limit
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+            try:
+                payload = decode_jwt_token(token, settings.JWT_SECRET_KEY)
+                scopes = payload.get("scopes", [])
+                role = payload.get("role", "")
+                if "admin" in scopes or role in ["owner", "admin"]:
+                    # Raise threshold to 100 requests per minute for administrative operators across all APIs
+                    adjusted_limit = 100
+            except Exception:
+                pass
+
+        
+        # Scope the rate limit key per client IP and endpoint path to avoid global IP-based blocking
+        rate_limit_key = f"{ip}:{request.url.path}"
+        rate_limiter.check_rate_limit(rate_limit_key, adjusted_limit, window)
     return dependency
+

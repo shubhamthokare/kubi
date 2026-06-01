@@ -13,8 +13,9 @@ class TestAiRagIntelligence(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         rate_limiter._requests = {}
 
+    @patch('app.db.database.get_db')
     @patch('app.workflows.remediation_workflow.get_db')
-    def test_feedback_approval_and_rejection_apis(self, mock_get_db):
+    def test_feedback_approval_and_rejection_apis(self, mock_get_db_workflow, mock_get_db_database):
         client = TestClient(app)
         
         # 1. Setup Database Mock using attribute access
@@ -33,7 +34,8 @@ class TestAiRagIntelligence(unittest.IsolatedAsyncioTestCase):
             "incidents": mock_incidents,
             "settings": mock_settings
         }[name]
-        mock_get_db.return_value = mock_db
+        mock_get_db_workflow.return_value = mock_db
+        mock_get_db_database.return_value = mock_db
         
         plan_id = "test-plan-123"
         
@@ -61,7 +63,18 @@ class TestAiRagIntelligence(unittest.IsolatedAsyncioTestCase):
             "status": "active"
         })
         
-        mock_settings.find_one = AsyncMock(return_value=None)
+        mock_settings.find_one = AsyncMock(return_value={
+            "id": "system_config",
+            "clusters": [
+                {
+                    "id": "my-cluster-1",
+                    "name": "Cluster 1",
+                    "auth_type": "agent",
+                    "agent_url": "http://cluster-1:8080"
+                }
+            ],
+            "active_cluster_id": "my-cluster-1"
+        })
         mock_plans.update_one = AsyncMock(return_value=MagicMock())
         mock_incidents.update_one = AsyncMock(return_value=MagicMock())
         

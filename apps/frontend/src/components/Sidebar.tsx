@@ -16,8 +16,10 @@ import { motion } from 'framer-motion';
 const menuItems = [
   { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { name: 'Analyzer', icon: Activity, path: '/analyzer' },
+  { name: 'Logs', icon: Terminal, path: '/logs' },
   { name: 'Incidents', icon: ShieldAlert, path: '/incidents' },
   { name: 'Remediation', icon: Wrench, path: '/remediation' },
+  { name: 'Playbooks', icon: FileText, path: '/playbooks' },
   { name: 'Reports', icon: FileText, path: '/reports' },
   { name: 'Settings', icon: Settings, path: '/settings' },
 ];

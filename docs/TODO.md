@@ -18,6 +18,11 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 - **[x] Multi-Platform Docker Orchestration**: Created `deploy-docker.ps1` and `deploy-docker.sh` wrapper utilities to launch the whole cluster stack with a single click.
 - **[x] Container Build & CI/CD Pipeline Security Hardening**: Secured container builds and runner workflows monorepo-wide using `--only-binary :all:` rules to block compromised dependency execution; established `--default-timeout=100` resilience against transient PyPI metadata server connection drops.
 - **[x] GKE Production Deployment**: All 5 workloads (`elasticsearch`, `kubi-agent`, `kubi-backend`, `kubi-frontend`, `mongodb`) running `1/1 Ready` in GKE namespace `kubi`, publicly accessible at `http://8.231.96.95`.
+- **[x] Forgot Password (OTP-based Reset)**: Added `/api/auth/forgot-password` and `/api/auth/reset-password` endpoints, complete with Next.js frontend pages, route protection whitelisting, and secure email verification.
+- **[x] Delete Account Danger Zone**: Added `DELETE /api/auth/delete-account` cascading database cleanup (clears workspaces, memberships, and oauth accounts) with a frontend Danger Zone confirmation modal.
+- **[x] Endpoint-Scoped Rate Limiting**: Scoped memory rate limit keys per client IP and endpoint path (`f"{ip}:{request.url.path}"`), preventing transient IP rate limit blockages.
+- **[x] Consolidated Master Deployment Documentation**: Consolidated separate Docker, GKE, and Minikube configuration guides into a single master handbook (`docs/DEPLOYMENT.md`).
+- **[x] Dynamic Gemini Token Usage Profiles**: Implemented Less, Moderate, and Max token usage settings in the frontend settings panel, dynamically adjusting logs truncation boundaries, RAG memory slicing, prompt lengths, and output token sizes to manage Gemini token consumption.
 
 ---
 
@@ -63,8 +68,8 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 ---
 
 ## ⚡ Phase 4: Custom Automation
-- [ ] **Operator Playbooks**: Let users define custom automation scripts (YAML/Python) to run alongside Gemini remediation proposals.
-- [ ] **Safe-mode Rollback guards**: Monitor workloads for 5 minutes post-remediation and auto-rollback if health checks degrade.
+- [x] **Operator Playbooks**: Let users define custom automation scripts (YAML/Python) to run alongside Gemini remediation proposals.
+- [x] **Safe-mode Rollback guards**: Monitor workloads for 5 minutes post-remediation and auto-rollback if health checks degrade.
 
 ---
 
@@ -76,5 +81,24 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 
 ---
 
-*Last Updated: May 24, 2026*
-*Project Stage: Phase 2 (Active)*
+## 🔧 Phase 6: Feature Completion & Production Readiness
+
+### Frontend Features
+- [x] **Frontend Feature Buildout**: Expand frontend pages to cover all backend API capabilities (playbooks UI, manual remediation UI, etc.).
+- [x] **Live Pod Log Viewer Dashboard**: Add a screen where users can check logs for any pod in real-time (WebSocket tail stream in the System Analyzer).
+- [x] **ChatOps/Slack/Email Integration UI**: Build frontend settings panel for configuring Slack, Email, and Discord webhook integrations per workspace (backend ChatOps service already exists).
+- [x] **User Email Verification Frontend Check**: Ensure frontend correctly handles the `email_not_verified` flow — if a user exists in DB but is unverified, prompt OTP verification before login (backend OTP flow already implemented in `auth_routes.py`).
+
+### Backend & API
+- [x] **Real Performance Data APIs**: Replace mock/static performance data on the dashboard with real-time APIs pulling from Prometheus/cluster metrics (CPU, memory, network).
+- [x] **Gemini Remediation Point-to-Point Fix**: Improve Gemini remediation plans to provide precise, actionable fixes (e.g., specific config changes, exact image tags) rather than generic restart/rollback actions.
+- [x] **GitLab MCP Integration**: Direct application of Gemini-suggested remediation via GitLab merge requests — auto-commit fixes to deployment manifests or application code.
+- [x] **Global Cluster Connection Enforcements**: Enforce strict zero-trust connection checks globally on all stats, performance, resources, pod yaml, and remediation plan (/plans, /approve, /reject) API endpoints.
+
+### Bug Fixes & Technical Debt
+- [x] **Fix DummyTracerProvider from Arize**: Resolve the `DummyTracerProvider` fallback in Arize AX telemetry so tracing works correctly when Arize Phoenix is unavailable.
+
+---
+
+*Last Updated: June 1, 2026*
+*Project Stage: Production Release Ready 🚀*

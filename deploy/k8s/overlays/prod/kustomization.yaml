@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - ../../base/
+  - ../../secrets/external/gcp/
   - ingress.yaml
 
 images:
