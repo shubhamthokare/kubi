@@ -16,6 +16,16 @@ const BASE_URL = typeof window !== 'undefined'
   ? '/api'
   : (process.env.BACKEND_URL ? `${process.env.BACKEND_URL}/api` : getBackendUrl());
 
+export const readApiResponse = async (response: Response) => {
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return response.json();
+  }
+
+  const text = await response.text();
+  return { detail: text || response.statusText };
+};
+
 const handleResponse = async (response: Response) => {
   if (response.status === 401 && typeof window !== 'undefined') {
     localStorage.removeItem("access_token");
@@ -31,7 +41,7 @@ const handleResponse = async (response: Response) => {
     let errorDetail = `API Error: ${response.statusText}`;
     const status = response.status;
     try {
-      const errJson = await response.json();
+      const errJson = await readApiResponse(response);
       if (errJson && errJson.detail) {
         errorDetail = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
       }
@@ -40,7 +50,7 @@ const handleResponse = async (response: Response) => {
     (error as any).status = status;
     throw error;
   }
-  return response.json();
+  return readApiResponse(response);
 };
 
 export const api = {
@@ -161,6 +171,7 @@ export const kubiApi = {
 
   // 🛠️ Diagnostics & Utilities
   getPlanDetails: (planId: string) => api.get(`/plans/${planId}`),
+  getPlanLineage: (planId: string) => api.get(`/plans/${planId}/lineage`),
   getBackendHealth: () => api.get('/health'),
   getDevToken: () => api.get('/auth/dev-token'),
   sendOtp: (email: string) => api.post('/auth/otp/send', { email }),

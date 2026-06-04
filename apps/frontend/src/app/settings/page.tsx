@@ -401,11 +401,11 @@ export default function SettingsPage() {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
+    <Container maxWidth={false} disableGutters sx={{ py: 0 }}>
       {/* Header */}
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+      <Box className="ops-page-header" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'flex-end' }, flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
         <Box>
-          <Typography variant="h4" fontWeight="bold" color="white" gutterBottom>
+          <Typography variant="h4" fontWeight={850} color="white" gutterBottom sx={{ fontSize: { xs: '1.6rem', md: '2rem' } }}>
             Settings
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -418,8 +418,8 @@ export default function SettingsPage() {
           onClick={handleSave}
           disabled={saving}
           sx={{ 
-            borderRadius: 2,
-            px: 4,
+            borderRadius: 1,
+            px: 3,
             py: 1,
             textTransform: 'none',
             fontWeight: 'bold',
@@ -432,7 +432,7 @@ export default function SettingsPage() {
 
       <Grid container spacing={3}>
         <Grid size={12}>
-          <Card elevation={0} sx={{ bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 3, backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <Card elevation={0} sx={{ bgcolor: 'rgba(15,23,42,0.62)', borderRadius: 1, border: '1px solid rgba(148,163,184,0.12)' }}>
             <Box sx={{ borderBottom: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
               <Tabs 
                 value={tabValue} 
@@ -508,8 +508,8 @@ export default function SettingsPage() {
                       Danger Zone
                     </Typography>
                     <Divider sx={{ my: 2, borderColor: 'rgba(239, 68, 68, 0.2)' }} />
-                    <Card sx={{ bgcolor: 'rgba(239, 68, 68, 0.03)', borderRadius: 3, border: '1px solid rgba(239, 68, 68, 0.15)', p: 2.5 }}>
-                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Card sx={{ bgcolor: 'rgba(239, 68, 68, 0.04)', borderRadius: 1, border: '1px solid rgba(239, 68, 68, 0.18)', p: 2 }}>
+                      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={2}>
                         <Box sx={{ textAlign: 'left' }}>
                           <Typography variant="body1" color="white" fontWeight="semibold">Delete SRE Account</Typography>
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
@@ -521,7 +521,7 @@ export default function SettingsPage() {
                           color="error"
                           onClick={() => setDeleteDialogOpen(true)}
                           sx={{
-                            borderRadius: 2,
+                            borderRadius: 1,
                             px: 3,
                             py: 1.2,
                             textTransform: 'none',

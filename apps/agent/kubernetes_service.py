@@ -1,6 +1,7 @@
 import os
 import requests
 import logging
+from resource_context import get_pod_controller_context
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,11 @@ class KubernetesService:
         auth_type = self.cluster_config.get("auth_type", "direct")
         self.use_direct = auth_type in ["direct", "kubeconfig"]
         self.disabled = (auth_type == "disabled")
+
+        # Client caching
+        self._cached_v1 = None
+        self._cached_apps_v1 = None
+        self._cached_config_hash = None
 
     def _init_direct_client(self):
         from kubernetes import client, config
@@ -145,15 +151,67 @@ class KubernetesService:
                 config.load_kube_config()
 
     def _get_direct_apis(self):
+        import hashlib, json
         from kubernetes import client
+
+        # Compute a hash of the current cluster_config
+        config_bytes = json.dumps(self.cluster_config, sort_keys=True, default=str).encode()
+        config_hash = hashlib.sha256(config_bytes).hexdigest()
+
+        # Return cached clients if config hasn't changed
+        if self._cached_config_hash == config_hash and self._cached_v1 is not None:
+            return self._cached_v1, self._cached_apps_v1
+
         self._init_direct_client()
         # Disable SSL hostname verification to support host.docker.internal / local cluster IP mapping
         configuration = client.Configuration.get_default_copy()
         configuration.assert_hostname = False
         configuration.verify_ssl = False
+        configuration.connection_pool_maxsize = 10
+        # Set explicit connection and read timeouts
+        import urllib3
+        urllib3.util.timeout.Timeout.DEFAULT_TIMEOUT = 10
         client.Configuration.set_default(configuration)
-        
-        return client.CoreV1Api(), client.AppsV1Api()
+
+        self._cached_v1 = client.CoreV1Api()
+        self._cached_apps_v1 = client.AppsV1Api()
+        self._cached_config_hash = config_hash
+
+        return self._cached_v1, self._cached_apps_v1
+
+    def test_connection(self):
+        """Test connectivity to the Kubernetes cluster.
+
+        Returns:
+            dict: {"connected": bool, "error": str or None}
+        """
+        if getattr(self, "disabled", False):
+            return {"connected": False, "error": "Kubernetes connection is disabled."}
+        if not self.use_direct:
+            # For agent-based mode, try a simple HTTP ping
+            try:
+                response = requests.get(f"{self.agent_url}/stats", timeout=5)
+                response.raise_for_status()
+                return {"connected": True, "error": None}
+            except Exception as e:
+                return {"connected": False, "error": f"Agent unreachable: {str(e)}"}
+        try:
+            v1, _ = self._get_direct_apis()
+            v1.list_namespace(timeout_seconds=3)
+            return {"connected": True, "error": None}
+        except Exception as e:
+            msg = str(e)
+            if "Unauthorized" in msg or "401" in msg:
+                friendly = "Authentication failed. Check your credentials or token."
+            elif "timed out" in msg.lower() or "timeout" in msg.lower():
+                friendly = "Connection timed out. Verify the API server endpoint is reachable."
+            elif "Name or service not known" in msg or "getaddrinfo" in msg:
+                friendly = "Could not resolve the API server hostname. Check the endpoint URL."
+            elif "Connection refused" in msg:
+                friendly = "Connection refused. Ensure the API server is running and the endpoint is correct."
+            else:
+                friendly = f"Connection failed: {msg}"
+            return {"connected": False, "error": friendly}
 
     def _get(self, endpoint: str):
         try:
@@ -178,7 +236,7 @@ class KubernetesService:
         if getattr(self, "disabled", False):
             return []
         if self.use_direct:
-            v1, _ = self._get_direct_apis()
+            v1, apps_v1 = self._get_direct_apis()
             failed_pods = []
             try:
                 if not namespaces or "*" in namespaces:
@@ -219,6 +277,7 @@ class KubernetesService:
                                     message = status.state.terminated.message
                                     break
                                     
+                        pod_context = get_pod_controller_context(pod, apps_v1, logger)
                         failed_pods.append({
                             "name": pod.metadata.name,
                             "namespace": pod.metadata.namespace,
@@ -227,7 +286,7 @@ class KubernetesService:
                             "message": message,
                             "uid": pod.metadata.uid,
                             "creation_timestamp": pod.metadata.creation_timestamp.isoformat() if pod.metadata.creation_timestamp else None,
-                            "has_owner": bool(pod.metadata.owner_references)
+                            **pod_context,
                         })
             except Exception as e:
                 logging.exception(f"Error fetching pods in direct mode: {e}")
@@ -321,10 +380,65 @@ class KubernetesService:
         return False, "Failed to connect to agent"
 
     def rollback_deployment(self, name: str, namespace: str = "default") -> tuple[bool, str]:
-        """Rolls back a deployment. Simulated."""
+        """Rolls back a deployment to the previous revision using kubectl rollout undo."""
         if getattr(self, "disabled", False):
             return False, "Kubernetes connection disabled."
-        return True, f"Deployment {name} rolled back successfully (Simulated)."
+        
+        if self.use_direct:
+            try:
+                _, apps_v1 = self._get_direct_apis()
+                from kubernetes.client.models import V1RollbackConfig
+                
+                # Create a rollback request to undo to the previous revision
+                rollback_config = V1RollbackConfig(revision=0)  # 0 means previous revision
+                
+                # Use the patch with kind: RollbackRequest to trigger rollback
+                body = {
+                    "apiVersion": "apps/v1",
+                    "kind": "RollbackRequest",
+                    "metadata": {"name": name},
+                    "spec": {"revision": 0}
+                }
+                
+                # Unfortunately, the Python client doesn't have direct rollback support
+                # So we'll use kubectl commands or manually revert the deployment
+                # For now, we'll execute a kubectl command through the agent or
+                # manually patch to use the previous revision
+                import subprocess
+                import json
+                
+                try:
+                    # Get current deployment history
+                    cmd_output = subprocess.run(
+                        ["kubectl", "rollout", "history", "deployment", name, "-n", namespace, "-o", "json"],
+                        capture_output=True, text=True, timeout=30
+                    )
+                    
+                    if cmd_output.returncode == 0:
+                        # Get previous revision and rollback
+                        cmd_rollback = subprocess.run(
+                            ["kubectl", "rollout", "undo", "deployment", name, "-n", namespace],
+                            capture_output=True, text=True, timeout=30
+                        )
+                        if cmd_rollback.returncode == 0:
+                            return True, f"Deployment {name} rolled back to previous revision successfully."
+                        else:
+                            return False, f"Rollback failed: {cmd_rollback.stderr}"
+                    else:
+                        return False, f"Failed to get rollout history: {cmd_output.stderr}"
+                except Exception as e:
+                    # If kubectl not available, log and fallback
+                    logger.warning(f"kubectl command failed for rollback: {e}. Attempting direct API approach.")
+                    return False, f"Rollback failed: {str(e)}"
+            except Exception as e:
+                logger.exception(f"Error rolling back deployment {name} directly: {e}")
+                return False, f"Direct rollback failed: {str(e)}"
+        
+        # Agent-based approach
+        result = self._post(f"/actions/rollback/{namespace}/{name}")
+        if result:
+            return result.get("success", False), result.get("message", "Unknown response from agent")
+        return False, "Failed to connect to agent for rollback"
 
     def delete_pod(self, name: str, namespace: str = "default") -> tuple[bool, str]:
         """Deletes a pod."""
@@ -349,12 +463,31 @@ class KubernetesService:
             return False, f"Failed to connect to agent: {str(e)}"
 
     def verify_deployment_health(self, name: str, namespace: str = "default") -> bool:
-        """Checks if a deployment has all its desired replicas available."""
+        """
+        Checks if a deployment has all its desired replicas ready and available.
+        Looks for ready_replicas == replicas and availability condition.
+        """
         resources = self.get_all_resources()
         if resources:
             for dep in resources.get("deployments", []):
                 if dep["name"] == name and dep["namespace"] == namespace:
-                    return True
+                    # Check if replicas are ready and available (not just existence)
+                    desired = dep.get("replicas", 0)
+                    ready = dep.get("ready_replicas", 0)
+                    available = dep.get("available_replicas", 0)
+                    
+                    # All desired replicas must be ready and available
+                    if desired > 0 and ready == desired and available == desired:
+                        return True
+                    elif desired == 0:
+                        # Scaled to zero - considered healthy
+                        return True
+                    else:
+                        logger.warning(
+                            f"Deployment {name}/{namespace} not ready: "
+                            f"desired={desired}, ready={ready}, available={available}"
+                        )
+                        return False
         return False
 
     def verify_pod_health(self, name: str, namespace: str = "default") -> bool:

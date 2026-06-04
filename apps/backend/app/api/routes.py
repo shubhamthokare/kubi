@@ -203,6 +203,23 @@ async def get_plan(plan_id: str, ks: KubernetesService = Depends(get_k8s_service
         raise HTTPException(status_code=404, detail="Plan not found")
     return plan
 
+@router.get(
+    "/plans/{plan_id}/lineage",
+    response_model=list,
+    dependencies=[Depends(rate_limit(60)), Depends(get_current_user_with_scope("sre:read"))],
+    responses={404: {"description": "Plan not found"}}
+)
+async def get_plan_lineage(plan_id: str, ks: KubernetesService = Depends(get_k8s_service)):
+    """
+    Get the full parent-child lineage chain for a remediation plan.
+    Returns all plans in the lineage, from root to current.
+    """
+    lineage = await remediation_workflow.get_plan_lineage(plan_id)
+    if not lineage:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return lineage
+
 @router.get("/incidents", response_model=IncidentListResponse, dependencies=[Depends(rate_limit(60))])
 async def get_incidents(
     x_cluster_id: Optional[str] = Header(None),
@@ -892,7 +909,7 @@ async def ingest_incident(incident_data: IncidentIngestRequest, request: Request
     settings_doc = None
     if workspace_id:
         settings_doc = await db.settings.find_one({"id": f"workspace_{workspace_id}"})
-    if not settings_doc:
+    else:
         settings_doc = await db.settings.find_one({"id": "system_config"})
         
     registered_clusters = []
@@ -998,6 +1015,58 @@ async def ingest_incident(incident_data: IncidentIngestRequest, request: Request
     # but since the cluster is remote, we just store it for the dashboard to manage.
     return {"status": "success", "id": str(result.inserted_id)}
 
+def _parse_k8s_connection_error(error: Exception) -> str:
+    """Parses raw Kubernetes connection exceptions into user-friendly error messages."""
+    err_str = str(error)
+    err_lower = err_str.lower()
+    
+    # Extract host:port if present
+    import re
+    host_match = re.search(r"host='([^']+)'.*?port=([0-9]+)", err_str)
+    host_info = f" at {host_match.group(1)}:{host_match.group(2)}" if host_match else ""
+    
+    if "connection refused" in err_lower:
+        return (
+            f"Connection refused{host_info}. "
+            f"The Kubernetes API server is not reachable. "
+            f"If using a local proxy (kubectl proxy, Docker Desktop, minikube), ensure it is running."
+        )
+    elif "max retries exceeded" in err_lower or "maxretryerror" in err_lower:
+        return (
+            f"Could not connect{host_info} after multiple attempts. "
+            f"Verify the server address is correct and the cluster is online."
+        )
+    elif "certificate verify failed" in err_lower or "ssl" in err_lower:
+        return (
+            f"SSL/TLS certificate verification failed{host_info}. "
+            f"Check your CA certificate or ensure the cluster certificate is trusted."
+        )
+    elif "timed out" in err_lower or "timeout" in err_lower:
+        return (
+            f"Connection timed out{host_info}. "
+            f"The API server did not respond in time. Check network connectivity and firewall rules."
+        )
+    elif "name or service not known" in err_lower or "nodename nor servname" in err_lower:
+        return (
+            f"DNS resolution failed{host_info}. "
+            f"The hostname could not be resolved. Verify the server address."
+        )
+    elif "unauthorized" in err_lower or "401" in err_str:
+        return (
+            f"Authentication failed{host_info}. "
+            f"The provided credentials were rejected. Check your client certificate, token, or kubeconfig."
+        )
+    elif "forbidden" in err_lower or "403" in err_str:
+        return (
+            f"Access forbidden{host_info}. "
+            f"Your credentials are valid but lack permissions. Check RBAC roles and bindings."
+        )
+    else:
+        # Truncate very long error messages but keep them informative
+        if len(err_str) > 300:
+            err_str = err_str[:300] + "..."
+        return f"Connection failed{host_info}: {err_str}"
+
 @router.post("/clusters/validate", response_model=StatusResponse, dependencies=[Depends(rate_limit(10)), Depends(get_current_user_with_scope("sre:write"))])
 async def validate_cluster(data: ValidateClusterRequest):
     """
@@ -1058,7 +1127,7 @@ async def validate_cluster(data: ValidateClusterRequest):
             else:
                 return {"status": "error", "message": "Connected but returned 0 nodes or namespaces. Check your cluster permissions."}
         except Exception as e:
-            return {"status": "error", "message": f"Direct connection failed: {str(e)}"}
+            return {"status": "error", "message": _parse_k8s_connection_error(e)}
         finally:
             for path in [ca_path, cert_path, key_path]:
                 if path and os.path.exists(path):
@@ -1098,7 +1167,7 @@ async def validate_cluster(data: ValidateClusterRequest):
             else:
                 return {"status": "error", "message": "Connected via Kubeconfig but returned 0 nodes or namespaces."}
         except Exception as e:
-            return {"status": "error", "message": f"Kubeconfig connection failed: {str(e)}"}
+            return {"status": "error", "message": _parse_k8s_connection_error(e)}
         finally:
             if kubeconfig_path and os.path.exists(kubeconfig_path):
                 try:
@@ -1123,7 +1192,7 @@ async def validate_cluster(data: ValidateClusterRequest):
             if response2.status_code < 500:
                 return {"status": "success", "message": "Successfully connected to Kubernetes agent!"}
     except Exception as e:
-        return {"status": "error", "message": f"Failed to connect to agent: {str(e)}"}
+        return {"status": "error", "message": _parse_k8s_connection_error(e)}
     return {"status": "error", "message": "Agent returned unhealthy status."}
 
 @router.post(
@@ -1169,7 +1238,8 @@ async def execute_manual_action(
         action_type=request.action_type,
         target_name=request.target_name,
         namespace=request.namespace,
-        reason=request.reason or "Manual user intervention"
+        reason=request.reason or "Manual user intervention",
+        patch_content=request.patch_content
     )
     
     success, message = await action_engine.execute_action(action)
@@ -1186,7 +1256,7 @@ async def create_manual_remediation(request: ManualRemediationRequest, x_cluster
     """
     from app.services.gemini_service import RemediationPlan
     plan = RemediationPlan(actions=request.actions, summary=request.summary or "Manual remediation plan")
-    plan_id = await remediation_workflow.store_plan(plan)
+    plan_id = await remediation_workflow.store_plan(plan, generated_by="manual")
     return {
         "plan_id": plan_id,
         "status": "pending_manual",

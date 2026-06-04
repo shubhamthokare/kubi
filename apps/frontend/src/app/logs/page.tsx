@@ -203,27 +203,41 @@ export default function LogsPage() {
     }
   };
 
-  // Group pods by deployment or namespace
-  const getNamespaceDeployments = (ns: string) => {
-    return resources.deployments.filter((d) => d.namespace === ns);
-  };
-
-  const getDeploymentPods = (depName: string, ns: string) => {
-    return resources.pods.filter((p) => p.namespace === ns && p.name.startsWith(depName));
-  };
-
-  const getStandalonePods = (ns: string) => {
-    const depNames = resources.deployments.filter((d) => d.namespace === ns).map((d) => d.name);
-    return resources.pods.filter((p) => {
-      if (p.namespace !== ns) return false;
-      return !depNames.some((dName) => p.name.startsWith(dName));
+  // Group pods by namespace and deployment using useMemo for high rendering performance
+  const groupedDeployments = React.useMemo(() => {
+    const maps: Record<string, any[]> = {};
+    resources.namespaces.forEach((ns) => {
+      maps[ns] = resources.deployments.filter((d) => d.namespace === ns);
     });
-  };
+    return maps;
+  }, [resources.namespaces, resources.deployments]);
+
+  const groupedPodsByDeployment = React.useMemo(() => {
+    const maps: Record<string, any[]> = {};
+    resources.deployments.forEach((dep) => {
+      maps[`${dep.namespace}/${dep.name}`] = resources.pods.filter(
+        (p) => p.namespace === dep.namespace && p.name.startsWith(dep.name)
+      );
+    });
+    return maps;
+  }, [resources.deployments, resources.pods]);
+
+  const groupedStandalonePods = React.useMemo(() => {
+    const maps: Record<string, any[]> = {};
+    resources.namespaces.forEach((ns) => {
+      const depNames = (groupedDeployments[ns] || []).map((d) => d.name);
+      maps[ns] = resources.pods.filter((p) => {
+        if (p.namespace !== ns) return false;
+        return !depNames.some((dName) => p.name.startsWith(dName));
+      });
+    });
+    return maps;
+  }, [resources.namespaces, resources.pods, groupedDeployments]);
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Box sx={{ mb: 6 }}>
-        <Typography variant="h4" fontWeight="bold" color="white" gutterBottom>
+    <Container maxWidth={false} disableGutters sx={{ py: 0 }}>
+      <Box className="ops-page-header">
+        <Typography variant="h4" fontWeight={850} color="white" gutterBottom sx={{ fontSize: { xs: '1.6rem', md: '2rem' } }}>
           Pod Log Explorer & Diagnostics
         </Typography>
         <Typography variant="body2" color="text.secondary">
@@ -236,27 +250,27 @@ export default function LogsPage() {
           <CircularProgress color="primary" size={48} />
         </Box>
       ) : (
-        <Grid container spacing={4}>
+        <Grid container spacing={2.5}>
           {/* LEFT: WORKLOADS TREE */}
           <Grid item xs={12} md={4} lg={3.5}>
-            <SreCard sx={{ height: '70vh', overflowY: 'auto' }}>
+            <SreCard sx={{ height: { xs: 360, md: 'calc(100vh - 250px)' }, minHeight: 520, overflowY: 'auto' }}>
               <CardContent sx={{ p: 2 }}>
-                <Typography variant="subtitle2" fontWeight="bold" color="white" sx={{ mb: 2, px: 1, textTransform: 'uppercase', tracking: 1 }}>
-                  📁 Workloads Tree
+                <Typography variant="subtitle2" fontWeight="bold" color="white" sx={{ mb: 2, px: 1, textTransform: 'uppercase', letterSpacing: 0 }}>
+                  Workloads Tree
                 </Typography>
                 <Divider sx={{ mb: 2, borderColor: 'rgba(255,255,255,0.05)' }} />
 
                 <List component="nav" disablePadding>
                   {resources.namespaces.map((ns) => {
                     const isNsExpanded = expandedNamespace === ns;
-                    const nsDeps = getNamespaceDeployments(ns);
-                    const standalonePods = getStandalonePods(ns);
+                    const nsDeps = groupedDeployments[ns] || [];
+                    const standalonePods = groupedStandalonePods[ns] || [];
 
                     return (
                       <Box key={ns} sx={{ mb: 1 }}>
                         <ListItemButton
                           onClick={() => setExpandedNamespace(isNsExpanded ? null : ns)}
-                          sx={{ borderRadius: 2, bgcolor: isNsExpanded ? 'rgba(96, 165, 250, 0.05)' : 'transparent', py: 1.2 }}
+                          sx={{ borderRadius: 1, bgcolor: isNsExpanded ? 'rgba(96, 165, 250, 0.08)' : 'transparent', py: 1 }}
                         >
                           <ListItemIcon sx={{ minWidth: 36, color: 'primary.main' }}>
                             <Layers size={18} />
@@ -270,13 +284,13 @@ export default function LogsPage() {
                             {/* Deployments inside namespace */}
                             {nsDeps.map((dep) => {
                               const isDepExpanded = expandedWorkload === dep.name;
-                              const depPods = getDeploymentPods(dep.name, ns);
+                              const depPods = groupedPodsByDeployment[`${ns}/${dep.name}`] || [];
 
                               return (
                                 <Box key={dep.name} sx={{ mt: 0.5 }}>
                                   <ListItemButton
                                     onClick={() => setExpandedWorkload(isDepExpanded ? null : dep.name)}
-                                    sx={{ borderRadius: 2, py: 0.8 }}
+                                    sx={{ borderRadius: 1, py: 0.75 }}
                                   >
                                     <ListItemIcon sx={{ minWidth: 32, color: 'secondary.main' }}>
                                       <Cpu size={16} />
@@ -293,7 +307,7 @@ export default function LogsPage() {
                                           selected={selectedPod === pod.name}
                                           onClick={() => handlePodSelect(pod.name, ns)}
                                           sx={{
-                                            borderRadius: 1.5,
+                                            borderRadius: 1,
                                             py: 0.6,
                                             my: 0.2,
                                             '&.Mui-selected': { bgcolor: 'rgba(96, 165, 250, 0.15)', color: 'white' },
@@ -321,7 +335,7 @@ export default function LogsPage() {
                               <Box sx={{ mt: 0.5 }}>
                                 <ListItemButton
                                   onClick={() => setExpandedWorkload(expandedWorkload === `${ns}-standalone` ? null : `${ns}-standalone`)}
-                                  sx={{ borderRadius: 2, py: 0.8 }}
+                                  sx={{ borderRadius: 1, py: 0.75 }}
                                 >
                                   <ListItemIcon sx={{ minWidth: 32, color: 'warning.main' }}>
                                     <HardDrive size={16} />
@@ -338,7 +352,7 @@ export default function LogsPage() {
                                         selected={selectedPod === pod.name}
                                         onClick={() => handlePodSelect(pod.name, ns)}
                                         sx={{
-                                          borderRadius: 1.5,
+                                            borderRadius: 1,
                                           py: 0.6,
                                           my: 0.2,
                                           '&.Mui-selected': { bgcolor: 'rgba(96, 165, 250, 0.15)', color: 'white' },
@@ -367,7 +381,7 @@ export default function LogsPage() {
           {/* RIGHT: DIAGNOSTICS & LOG STREAMING PANEL */}
           <Grid item xs={12} md={8} lg={8.5}>
             {selectedPod ? (
-              <SreCard sx={{ height: '70vh', display: 'flex', flexDirection: 'column' }}>
+              <SreCard sx={{ height: { xs: 560, md: 'calc(100vh - 250px)' }, minHeight: 520, display: 'flex', flexDirection: 'column' }}>
                 <Box sx={{ borderBottom: 1, borderColor: 'rgba(255,255,255,0.05)', px: 3, pt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
                   <Box>
                     <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 0.5 }}>
@@ -377,7 +391,7 @@ export default function LogsPage() {
                       <Chip label={selectedNamespace} size="small" variant="outlined" color="primary" sx={{ height: 20, fontSize: '0.7rem', fontWeight: 'bold' }} />
                     </Stack>
                     <Typography variant="caption" color="text.secondary">
-                      Pod Telemetry Status • Switched Context
+                      Pod telemetry status - switched context
                     </Typography>
                   </Box>
                   <Tabs value={activeTab} onChange={handleTabChange} sx={{ '& .MuiTab-root': { py: 2, textTransform: 'none', fontWeight: 'bold' } }}>
@@ -468,7 +482,7 @@ export default function LogsPage() {
                             <Select
                               value={esSearchIndex}
                               onChange={(e) => setEsSearchIndex(e.target.value)}
-                              sx={{ borderRadius: 2, bgcolor: 'rgba(0,0,0,0.4)', color: 'white', '& fieldset': { borderColor: 'rgba(255,255,255,0.1)' } }}
+                              sx={{ borderRadius: 1, bgcolor: 'rgba(0,0,0,0.4)', color: 'white', '& fieldset': { borderColor: 'rgba(255,255,255,0.1)' } }}
                             >
                               <MenuItem value="logs">Logs index</MenuItem>
                               <MenuItem value="incidents">Incidents index</MenuItem>
@@ -489,7 +503,7 @@ export default function LogsPage() {
                             sx={{
                               '& .MuiOutlinedInput-root': {
                                 color: 'white',
-                                borderRadius: 2,
+                                borderRadius: 1,
                                 bgcolor: 'rgba(0,0,0,0.4)',
                                 '& fieldset': { borderColor: 'rgba(255,255,255,0.1)' }
                               }
@@ -505,7 +519,7 @@ export default function LogsPage() {
                             onClick={handleEsSearch}
                             disabled={esSearchLoading || !esSearchQuery.trim()}
                             startIcon={esSearchLoading ? <CircularProgress size={16} color="inherit" /> : <Search size={16} />}
-                            sx={{ height: 40, borderRadius: 2, textTransform: 'none', fontWeight: 'bold' }}
+                            sx={{ height: 40, borderRadius: 1, textTransform: 'none', fontWeight: 'bold' }}
                           >
                             {esSearchLoading ? 'Searching...' : 'Search'}
                           </Button>
@@ -529,10 +543,10 @@ export default function LogsPage() {
                       ) : (
                         <Stack spacing={2}>
                           {esSearchResults.map((hit, idx) => (
-                            <Box key={idx} sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 1.5 }}>
+                            <Box key={idx} className="sre-card" sx={{ p: 2, borderRadius: 1.5 }}>
                               <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
                                 <Typography variant="caption" color="primary" sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
-                                  Match #{idx + 1} • Score: {hit.score?.toFixed(2) || '1.0'}
+                                  Match #{idx + 1} - Score: {hit.score?.toFixed(2) || '1.0'}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
                                   {hit.timestamp ? new Date(hit.timestamp).toLocaleString() : 'Just now'}
@@ -550,17 +564,15 @@ export default function LogsPage() {
                 )}
               </SreCard>
             ) : (
-              <Paper
+              <SreCard
                 sx={{
-                  height: '70vh',
-                  bgcolor: 'background.paper',
-                  border: '1px solid rgba(255,255,255,0.05)',
-                  borderRadius: 3,
+                  height: { xs: 420, md: 'calc(100vh - 250px)' },
+                  minHeight: 520,
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'center',
                   alignItems: 'center',
-                  py: 10,
+                  py: 6,
                 }}
               >
                 <Terminal size={48} style={{ opacity: 0.1, marginBottom: 16 }} />
@@ -570,7 +582,7 @@ export default function LogsPage() {
                 <Typography variant="caption" color="text.secondary">
                   Expand a namespace and click on an SRE pod to stream logs or view YAML
                 </Typography>
-              </Paper>
+              </SreCard>
             )}
           </Grid>
         </Grid>

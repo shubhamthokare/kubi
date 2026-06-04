@@ -70,6 +70,26 @@ test.describe('SRE Ingestion Hub E2E Integration Journey', () => {
     console.log('[Step 1] User successfully logged in!');
 
     // -------------------------------------------------
+    // 1.5. Connect a Kubernetes Cluster in Settings/Configure
+    // -------------------------------------------------
+    console.log('[Step 1.5] Connecting a mock cluster to workspace');
+    await page.goto(`${baseURL}/dashboard/configure`);
+    await expect(page.locator('text=Kubi Multi-Cluster Hub')).toBeVisible({ timeout: 15000 });
+    
+    await page.click('button:has-text("Register Cluster")');
+    await page.waitForTimeout(500);
+    await page.fill('input[placeholder="e.g. Production Cluster"]', 'Minikube-Local');
+    await page.click('text=Kubi In-Cluster Agent');
+    await page.fill('input[placeholder="e.g. http://10.96.0.45:8080"]', 'http://kubi-agent-service:8080');
+    await page.click('button:has-text("Save Cluster")');
+    
+    await expect(page.locator('text=Minikube-Local').first()).toBeVisible({ timeout: 10000 });
+    
+    await page.click('button:has-text("Save Configuration")');
+    await expect(page.locator('text=All configurations persisted successfully!')).toBeVisible({ timeout: 15000 });
+    console.log('[Step 1.5] Cluster connected and saved successfully!');
+
+    // -------------------------------------------------
     // 2. Navigate to Ingestion Hub
     // -------------------------------------------------
     console.log('[Step 2] Navigating to Incidents page');

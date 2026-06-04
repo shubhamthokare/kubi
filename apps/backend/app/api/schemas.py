@@ -68,11 +68,14 @@ class PlanResponse(BaseModel):
     plan_id: str
     status: str
     plan: Optional[Dict[str, Any]] = None
-    generated_by: Optional[str] = "ai"
+    generated_by: Optional[str] = None
     tokens_consumed: Optional[int] = 0
     cluster_id: Optional[str] = None
     pod_name: Optional[str] = None
     namespace: Optional[str] = None
+    resource_context: Optional[Dict[str, Any]] = None
+    parent_plan_id: Optional[str] = None
+    superseded_by: Optional[str] = None
 
 class PlanListResponse(BaseModel):
     plans: List[Dict[str, Any]]
@@ -90,6 +93,7 @@ class ManualActionRequest(BaseModel):
     namespace: str
     cluster_id: Optional[str] = None
     reason: Optional[str] = "Manual user intervention"
+    patch_content: Optional[str] = None
 class ManualRemediationResponse(BaseModel):
     plan_id: str
     status: str

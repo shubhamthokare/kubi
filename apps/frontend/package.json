@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "git config core.hooksPath ../../.githooks 2>/dev/null || true"
+    "quality-check": "python ../../deploy/scripts/check_frontend_quality.py",
+    "postinstall": "git config core.hooksPath ../../.githooks 2>/dev/null || true",
+    "doctor": "react-doctor . --no-telemetry"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -62,6 +64,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "jest": "^30.4.2",
+    "react-doctor": "^0.3.0",
     "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",
     "typescript": "^5"

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Activity, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { Box, Stack, Typography, Button, Container, TextField, Alert, CircularProgress, InputAdornment, IconButton } from '@mui/material';
 import { SreAuthCard } from '@/components/ui/sre-layout';
+import { readApiResponse } from '@/lib/api';
 
 export default function RegisterPage() {
   const [name, setName] = React.useState('');
@@ -48,7 +49,7 @@ export default function RegisterPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
+        const data = await readApiResponse(res);
         throw new Error(data.detail || 'Registration failed. Email may already be in use.');
       }
 

@@ -4,6 +4,7 @@ metadata:
   name: kubi-config
   namespace: kubi
 data:
-  BACKEND_URL: "http://kubi-backend-service:8000"
-  AGENT_URL: "http://kubi-agent-service:8080"
+  BACKEND_URL: "http://backend.kubi.kontactless.in"
+  AGENT_URL: "http://agent.kubi.kontactless.in"
   FRONTEND_URL: "http://kubi.kontactless.in"
+  

@@ -3,10 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { 
-  CheckCircle, 
   AlertTriangle, 
-  Play, 
-  Pause, 
   FileText, 
   History, 
   Wrench, 
@@ -15,7 +12,9 @@ import {
   X, 
   Cpu, 
   CheckCircle2,
-  Server
+  Server,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import {
   Box,
@@ -34,9 +33,17 @@ import {
   DialogActions,
   Grid,
   Snackbar,
-  Alert
+  Alert,
+  Collapse,
+  IconButton,
+  TextField
 } from '@mui/material';
 import { kubiApi } from '@/lib/api';
+
+type GeminiConnectionState = {
+  status: 'checking' | 'success' | 'error' | 'blocked' | 'invalid';
+  message: string;
+};
 
 function RemediationContent() {
   const searchParams = useSearchParams();
@@ -52,6 +59,75 @@ function RemediationContent() {
   const [selectedPlan, setSelectedPlan] = useState<any | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' as 'success' | 'error' | 'info' });
+  const [planLineages, setPlanLineages] = useState<{ [key: string]: any[] }>({});
+  const [expandedLineages, setExpandedLineages] = useState<{ [key: string]: boolean }>({});
+  const [manifestDialogOpen, setManifestDialogOpen] = useState(false);
+  const [manifestYaml, setManifestYaml] = useState('');
+  const [manifestTarget, setManifestTarget] = useState<{ name: string; namespace: string; clusterId?: string | null } | null>(null);
+  const [geminiConnection, setGeminiConnection] = useState<GeminiConnectionState>({
+    status: 'checking',
+    message: 'Checking Gemini connectivity...'
+  });
+
+  const getPlanTargetKey = (plan: any): string => {
+    const firstAction = plan.plan?.actions?.[0];
+    const namespaceKey = firstAction?.namespace || plan.namespace || 'default';
+    const targetKey = firstAction?.target_name || plan.pod_name || plan.plan_id;
+    return `${namespaceKey}:${targetKey}`;
+  };
+
+  const getPlanSortKey = (plan: any): string => {
+    return String(plan._id || plan.plan_id || '');
+  };
+
+  const getResourceContext = (plan: any) => {
+    return plan.resource_context || plan.plan?.resource_context || null;
+  };
+
+  const formatList = (items: any[] | undefined, fallback = 'None') => {
+    if (!items || items.length === 0) return fallback;
+    return items.slice(0, 6).join(', ');
+  };
+
+  const filterActivePlans = (allPlans: any[]) => {
+    const leafPlans = allPlans.filter(plan => !plan.superseded_by);
+    const latestByTarget = new Map<string, any>();
+
+    leafPlans.forEach(plan => {
+      const key = getPlanTargetKey(plan);
+      const existing = latestByTarget.get(key);
+      if (!existing || getPlanSortKey(plan) > getPlanSortKey(existing)) {
+        latestByTarget.set(key, plan);
+      }
+    });
+
+    return Array.from(latestByTarget.values());
+  };
+
+  const getPlanLineage = (plan: any, allPlans: any[]): any[] => {
+    const lineage = [plan];
+    let current = plan;
+    
+    while (current && current.parent_plan_id) {
+      const parent = allPlans.find(p => p.plan_id === current.parent_plan_id);
+      if (parent) {
+        lineage.unshift(parent);
+        current = parent;
+      } else {
+        break;
+      }
+    }
+    
+    if (lineage.length > 1) {
+      return lineage;
+    }
+
+    const fallbackLineage = allPlans
+      .filter(candidate => getPlanTargetKey(candidate) === getPlanTargetKey(plan))
+      .sort((a, b) => getPlanSortKey(a).localeCompare(getPlanSortKey(b)));
+
+    return fallbackLineage.length > 1 ? fallbackLineage : lineage;
+  };
 
   const fetchPlans = async () => {
     try {
@@ -60,7 +136,17 @@ function RemediationContent() {
         kubiApi.getIncidents(),
         kubiApi.getSettings().catch(() => null)
       ]);
-      setPlans(plansRes.plans || []);
+      const allPlans = plansRes.plans || [];
+      const activePlans = filterActivePlans(allPlans);
+      
+      const lineageMap: { [key: string]: any[] } = {};
+      activePlans.forEach(plan => {
+        lineageMap[plan.plan_id] = getPlanLineage(plan, allPlans);
+      });
+      
+      setPlans(activePlans);
+      setPlanLineages(lineageMap);
+      
       // Filter incidents where AI analysis failed
       const failed = (incidentsRes.incidents || []).filter((inc: any) => inc.ai_failed && inc.status === 'active');
       setFailedIncidents(failed);
@@ -76,9 +162,62 @@ function RemediationContent() {
     }
   };
 
+  const fetchGeminiConnection = async () => {
+    setGeminiConnection({ status: 'checking', message: 'Checking Gemini connectivity...' });
+    try {
+      const res = await kubiApi.validateGemini();
+      setGeminiConnection({
+        status: res.status === 'success' ? 'success' : (res.status || 'error'),
+        message: res.message || 'Gemini validation completed.'
+      });
+    } catch (error: any) {
+      setGeminiConnection({
+        status: 'error',
+        message: error.message || 'Gemini validation failed.'
+      });
+    }
+  };
+
   useEffect(() => {
     fetchPlans();
+    fetchGeminiConnection();
   }, []);
+
+  const getGeminiStatusMeta = () => {
+    if (geminiConnection.status === 'success') {
+      return {
+        label: 'Gemini: Connected',
+        iconClass: 'text-emerald-400',
+        color: '#10b981',
+        background: 'rgba(16, 185, 129, 0.05)',
+        border: 'rgba(16, 185, 129, 0.15)',
+        shadow: 'rgba(16, 185, 129, 0.03)',
+        description: 'Remediation plans can use live Gemini analysis with real-time container logs and K8s ownership context. Approved proposals apply structured remediation actions with cluster-health verification.'
+      };
+    }
+
+    if (geminiConnection.status === 'checking') {
+      return {
+        label: 'Gemini: Checking',
+        iconClass: 'text-sky-400',
+        color: '#38bdf8',
+        background: 'rgba(56, 189, 248, 0.05)',
+        border: 'rgba(56, 189, 248, 0.15)',
+        shadow: 'rgba(56, 189, 248, 0.03)',
+        description: 'Kubi is validating Gemini connectivity before reporting AI remediation status.'
+      };
+    }
+
+    return {
+      label: geminiConnection.status === 'blocked' ? 'Gemini: Blocked' : 'Gemini: Offline',
+      iconClass: 'text-amber-400',
+      color: '#f59e0b',
+      background: 'rgba(245, 158, 11, 0.05)',
+      border: 'rgba(245, 158, 11, 0.18)',
+      shadow: 'rgba(245, 158, 11, 0.03)',
+      description: 'Gemini is not currently connected. Kubi will use rule-based fallback remediation and manual manifest edits until Gemini validation succeeds.'
+    };
+  };
 
   const handleApprove = async (planId: string) => {
     setActionLoading(planId);
@@ -116,27 +255,74 @@ function RemediationContent() {
     setDialogOpen(true);
   };
 
+  const getManifestTarget = (plan: any) => {
+    const firstAction = plan.plan?.actions?.[0] || {};
+    return {
+      name: plan.pod_name || podName || firstAction.target_name,
+      namespace: plan.namespace || namespace || firstAction.namespace || 'default',
+      clusterId: plan.cluster_id || null
+    };
+  };
+
+  const handleEditManifest = async (plan: any) => {
+    const target = getManifestTarget(plan);
+    if (!target.name) {
+      setSnackbar({ open: true, message: 'No pod target found for manifest edit.', severity: 'error' });
+      return;
+    }
+    setActionLoading(`manifest-${plan.plan_id}`);
+    try {
+      const res = await kubiApi.getPodYaml(target.namespace, target.name);
+      setManifestTarget(target);
+      setManifestYaml(res.yaml || '');
+      setManifestDialogOpen(true);
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message || 'Failed to load pod manifest.', severity: 'error' });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleApplyManifest = async () => {
+    if (!manifestTarget || !manifestYaml.trim()) return;
+    setActionLoading('apply-manifest');
+    try {
+      const res = await kubiApi.executeManualAction({
+        action_type: 'apply_manifest',
+        target_name: manifestTarget.name,
+        namespace: manifestTarget.namespace,
+        cluster_id: manifestTarget.clusterId,
+        reason: 'Manual pod manifest update',
+        patch_content: manifestYaml
+      });
+      setSnackbar({ open: true, message: res.message || 'Manifest applied successfully.', severity: 'success' });
+      setManifestDialogOpen(false);
+      await fetchPlans();
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err.message || 'Failed to apply manifest.', severity: 'error' });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   return (
-    <Container maxWidth="xl" sx={{ py: 4, pb: 16 }}>
+    <Container maxWidth={false} disableGutters sx={{ py: 0, pb: 8 }}>
       {/* Page Header */}
       <Stack 
         direction={{ xs: 'column', sm: 'row' }} 
         justifyContent="space-between" 
         alignItems={{ xs: 'flex-start', sm: 'flex-end' }} 
         spacing={2} 
-        sx={{ mb: 6 }}
+        className="ops-page-header"
       >
         <Box>
-          <Typography 
-            variant="h4" 
-            fontWeight="900" 
-            color="white" 
+          <Typography
+            variant="h4"
+            fontWeight="850"
+            color="white"
             gutterBottom
             sx={{
-              letterSpacing: '-1.5px',
-              background: 'linear-gradient(135deg, #ffffff 30%, #a5f3fc 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
+              fontSize: { xs: '1.6rem', md: '2rem' },
             }}
           >
             Remediation Plans
@@ -146,13 +332,13 @@ function RemediationContent() {
           </Typography>
         </Box>
         
-        <Button 
-          variant="outlined" 
+        <Button
+          variant="outlined"
           startIcon={<History size={16} />}
-          sx={{ 
-            borderRadius: 2.5, 
-            textTransform: 'none', 
-            borderColor: 'rgba(255,255,255,0.06)', 
+          sx={{
+            borderRadius: 2.5,
+            textTransform: 'none',
+            borderColor: 'rgba(255,255,255,0.06)',
             color: 'rgba(255,255,255,0.65)',
             bgcolor: 'rgba(255,255,255,0.01)',
             fontWeight: 600,
@@ -176,12 +362,12 @@ function RemediationContent() {
           </Typography>
         </Box>
       ) : clusters.length === 0 ? (
-        <Paper 
-          sx={{ 
-            py: 12, 
-            textAlign: 'center', 
-            bgcolor: 'rgba(15, 23, 42, 0.25)', 
-            borderRadius: 4, 
+        <Paper
+          sx={{
+            py: 12,
+            textAlign: 'center',
+            bgcolor: 'rgba(15, 23, 42, 0.25)',
+            borderRadius: 1,
             border: '1px solid rgba(255,255,255,0.06)',
             backdropFilter: 'blur(12px)',
             maxWidth: '620px',
@@ -218,12 +404,12 @@ function RemediationContent() {
           </Button>
         </Paper>
       ) : plans.length === 0 && failedIncidents.length === 0 ? (
-        <Paper 
-          sx={{ 
-            py: 12, 
-            textAlign: 'center', 
-            bgcolor: 'rgba(15, 23, 42, 0.25)', 
-            borderRadius: 4, 
+        <Paper
+          sx={{
+            py: 12,
+            textAlign: 'center',
+            bgcolor: 'rgba(15, 23, 42, 0.25)',
+            borderRadius: 1,
             border: '1px solid rgba(255,255,255,0.06)',
             backdropFilter: 'blur(12px)'
           }}
@@ -233,18 +419,18 @@ function RemediationContent() {
           <Typography variant="body2" color="text.secondary">All clusters are fully synchronized and healthy.</Typography>
         </Paper>
       ) : (
-        <Grid container spacing={4}>
+        <Grid container spacing={2.5}>
           {/* Main Column */}
           <Grid item xs={12} lg={8.5}>
-            <Stack spacing={4.5}>
+            <Stack spacing={2.5}>
               {/* Failed AI Analyses */}
               {failedIncidents.map((incident) => (
-                <Card 
-                  key={incident._id} 
+                <Card
+                  key={incident._id}
                   className="glass glow-error"
-                  sx={{ 
-                    borderRadius: 4, 
-                    borderLeft: '5px solid #ef4444 !important',
+                  sx={{
+                    borderRadius: 1,
+                    borderLeft: '3px solid #ef4444 !important',
                   }}
                 >
                   <CardContent sx={{ p: 4 }}>
@@ -259,13 +445,13 @@ function RemediationContent() {
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3.5, fontSize: '0.85rem', lineHeight: 1.6 }}>
                       The AI SRE agent was unable to compile an autonomous remediation plan for resource <strong>{incident.pod?.name || incident.pod_name || "Unknown Resource"}</strong>.
                     </Typography>
-                    <Box sx={{ p: 2.5, bgcolor: 'rgba(2, 6, 23, 0.65)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 3, mb: 3.5 }}>
+                    <Box sx={{ p: 2.5, bgcolor: 'rgba(2, 6, 23, 0.65)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 1, mb: 3.5 }}>
                       <Typography variant="caption" sx={{ color: '#fca5a5', fontFamily: 'monospace', fontSize: '0.75rem', display: 'block', leading: 1.6 }}>
                         {incident.rca || "Unknown error during analysis"}
                       </Typography>
                     </Box>
                     {incident.error_type === 'API_KEY_BLOCKED' && (
-                      <Alert severity="error" variant="outlined" sx={{ borderRadius: 3, mb: 3.5, borderColor: 'rgba(239, 68, 68, 0.3)', color: '#fca5a5', bgcolor: 'rgba(239,68,68,0.02)' }}>
+                      <Alert severity="error" variant="outlined" sx={{ borderRadius: 1, mb: 3.5, borderColor: 'rgba(239, 68, 68, 0.3)', color: '#fca5a5', bgcolor: 'rgba(239,68,68,0.02)' }}>
                         Your Gemini API key appears to be blocked. Please check your cloud quotas and configuration.
                       </Alert>
                     )}
@@ -303,18 +489,17 @@ function RemediationContent() {
                 const statusMeta = getStatusMeta();
 
                 return (
-                  <Card 
-                    key={plan.plan_id} 
+                  <Card
+                    key={plan.plan_id}
                     className={`glass`}
-                    sx={{ 
-                      borderRadius: 4, 
-                      borderLeft: `5px solid ${statusMeta.color} !important`,
+                    sx={{
+                      borderRadius: 1,
+                      borderLeft: `3px solid ${statusMeta.color} !important`,
                       boxShadow: isHighlighted ? `0 0 30px ${statusMeta.shadow}` : 'none',
                       borderColor: isHighlighted ? statusMeta.border : 'rgba(255,255,255,0.06)',
                       position: 'relative',
                       '&:hover': {
                         borderColor: isHighlighted ? statusMeta.border : 'rgba(255,255,255,0.12)',
-                        transform: 'translateY(-2px)'
                       }
                     }}
                   >
@@ -369,6 +554,34 @@ function RemediationContent() {
                                 }} 
                               />
                             )}
+                            {plan.generated_by === 'rule-based' && (
+                              <Chip 
+                                label="Rule-Based" 
+                                size="small" 
+                                sx={{ 
+                                  bgcolor: 'rgba(251, 146, 60, 0.08)', 
+                                  color: '#fb923c', 
+                                  fontWeight: '900', 
+                                  fontSize: '0.65rem',
+                                  border: '1px solid rgba(251, 146, 60, 0.15)',
+                                  boxShadow: '0 0 10px rgba(251,146,60,0.05)'
+                                }} 
+                              />
+                            )}
+                            {plan.generated_by === 'manual' && (
+                              <Chip 
+                                label="Manual" 
+                                size="small" 
+                                sx={{ 
+                                  bgcolor: 'rgba(107, 114, 128, 0.08)', 
+                                  color: '#6b7280', 
+                                  fontWeight: '900', 
+                                  fontSize: '0.65rem',
+                                  border: '1px solid rgba(107, 114, 128, 0.15)',
+                                  boxShadow: '0 0 10px rgba(107,114,128,0.05)'
+                                }} 
+                              />
+                            )}
                             {plan.tokens_consumed > 0 && (
                               <Chip 
                                 label={`${plan.tokens_consumed.toLocaleString()} Tokens`}
@@ -413,6 +626,37 @@ function RemediationContent() {
                               <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
                               <span>Namespace: <strong style={{ color: '#ffffff' }}>{plan.namespace || 'default'}</strong></span>
                             </Typography>
+                          )}
+                          {getResourceContext(plan) && (
+                            <Box sx={{ mt: 2, mb: 1.5, p: 2, borderRadius: 2.5, bgcolor: 'rgba(2, 6, 23, 0.42)', border: '1px solid rgba(96,165,250,0.12)' }}>
+                              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.25 }}>
+                                <Chip
+                                  size="small"
+                                  label={`Scenario: ${getResourceContext(plan).scenario || getResourceContext(plan).status_reason || 'Unknown'}`}
+                                  sx={{ bgcolor: 'rgba(96,165,250,0.08)', color: '#93c5fd', border: '1px solid rgba(96,165,250,0.16)', fontSize: '0.68rem', fontWeight: 800 }}
+                                />
+                                <Chip
+                                  size="small"
+                                  label={`Owner: ${getResourceContext(plan).controller_kind || getResourceContext(plan).owner_kind || 'Bare Pod'}`}
+                                  sx={{ bgcolor: 'rgba(16,185,129,0.07)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.14)', fontSize: '0.68rem', fontWeight: 800 }}
+                                />
+                                {(getResourceContext(plan).invalid_actions || getResourceContext(plan).blocked_actions)?.length > 0 && (
+                                  <Chip
+                                    size="small"
+                                    label={`Blocked: ${formatList(getResourceContext(plan).invalid_actions || getResourceContext(plan).blocked_actions)}`}
+                                    sx={{ bgcolor: 'rgba(239,68,68,0.07)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.16)', fontSize: '0.68rem', fontWeight: 800 }}
+                                  />
+                                )}
+                              </Stack>
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.55 }}>
+                                Valid actions: <strong style={{ color: 'rgba(255,255,255,0.78)' }}>{formatList(getResourceContext(plan).valid_actions)}</strong>
+                              </Typography>
+                              {getResourceContext(plan).redemption_guidance && (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75, lineHeight: 1.55 }}>
+                                  {getResourceContext(plan).redemption_guidance}
+                                </Typography>
+                              )}
+                            </Box>
                           )}
                           <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', opacity: 0.6 }}>
                             ID: {plan.plan_id.slice(0, 8)}
@@ -515,6 +759,28 @@ function RemediationContent() {
                           >
                             Approve and Execute
                           </Button>
+                          <Button
+                            variant="outlined"
+                            startIcon={actionLoading === `manifest-${plan.plan_id}` ? <Loader2 className="animate-spin" size={18} /> : <FileText size={18} />}
+                            onClick={() => handleEditManifest(plan)}
+                            disabled={actionLoading !== null}
+                            sx={{
+                              px: 3.5,
+                              py: 1.5,
+                              borderRadius: 3,
+                              textTransform: 'none',
+                              borderColor: 'rgba(96, 165, 250, 0.25)',
+                              color: '#60a5fa',
+                              bgcolor: 'rgba(96, 165, 250, 0.03)',
+                              fontWeight: 700,
+                              '&:hover': {
+                                borderColor: '#60a5fa',
+                                bgcolor: 'rgba(96, 165, 250, 0.08)'
+                              }
+                            }}
+                          >
+                            Edit Manifest
+                          </Button>
                           <Button 
                             variant="outlined" 
                             color="error"
@@ -599,6 +865,27 @@ function RemediationContent() {
                             >
                               {actionLoading === `retry-${plan.plan_id}` ? 'Retrying scan...' : 'Retry AI Analysis & Generate New Plan'}
                             </Button>
+                            <Button
+                              variant="outlined"
+                              startIcon={actionLoading === `manifest-${plan.plan_id}` ? <Loader2 className="animate-spin" size={16} /> : <FileText size={16} />}
+                              onClick={() => handleEditManifest(plan)}
+                              disabled={actionLoading !== null}
+                              sx={{
+                                py: 1.4,
+                                borderRadius: 3,
+                                fontWeight: '800',
+                                textTransform: 'none',
+                                borderColor: 'rgba(96, 165, 250, 0.25)',
+                                color: '#60a5fa',
+                                bgcolor: 'rgba(96, 165, 250, 0.03)',
+                                '&:hover': {
+                                  borderColor: '#60a5fa',
+                                  bgcolor: 'rgba(96, 165, 250, 0.08)'
+                                }
+                              }}
+                            >
+                              Edit Pod Manifest
+                            </Button>
                             
                             {plan.plan?.actions && plan.plan.actions.length > 0 && (
                               <>
@@ -676,6 +963,72 @@ function RemediationContent() {
                           </Stack>
                         </Box>
                       )}
+
+                      {/* Parent / child remediation lineage */}
+                      {planLineages[plan.plan_id] && planLineages[plan.plan_id].length > 1 && (
+                        <Box sx={{ mt: 4 }}>
+                          <Divider sx={{ my: 3, borderColor: 'rgba(255,255,255,0.06)' }} />
+                          <Box
+                            onClick={() => setExpandedLineages(prev => ({ ...prev, [plan.plan_id]: !prev[plan.plan_id] }))}
+                            sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, cursor: 'pointer' }}
+                          >
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <History size={16} style={{ color: 'rgba(255,255,255,0.5)' }} />
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.8px' }}
+                              >
+                                Parent / Child Lineage ({planLineages[plan.plan_id].length} Attempts)
+                              </Typography>
+                            </Box>
+                            <IconButton size="small" sx={{ color: 'rgba(255,255,255,0.55)' }}>
+                              {expandedLineages[plan.plan_id] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            </IconButton>
+                          </Box>
+                          <Collapse in={!!expandedLineages[plan.plan_id]} timeout={180}>
+                            <Stack spacing={1.5} sx={{ borderLeft: '1px solid rgba(96,165,250,0.2)', pl: 2 }}>
+                              {planLineages[plan.plan_id].map((historyPlan: any, idx: number) => (
+                                <Paper
+                                  key={historyPlan.plan_id}
+                                  sx={{
+                                    p: 2,
+                                    bgcolor: historyPlan.plan_id === plan.plan_id ? 'rgba(59,130,246,0.06)' : 'rgba(255,255,255,0.02)',
+                                    border: historyPlan.plan_id === plan.plan_id ? '1px solid rgba(96,165,250,0.22)' : '1px solid rgba(255,255,255,0.04)',
+                                    borderRadius: 2.5,
+                                    position: 'relative',
+                                    '&:before': {
+                                      content: '""',
+                                      position: 'absolute',
+                                      left: -17,
+                                      top: 18,
+                                      width: 8,
+                                      height: 8,
+                                      borderRadius: '50%',
+                                      bgcolor: historyPlan.plan_id === plan.plan_id ? '#60a5fa' : 'rgba(255,255,255,0.35)'
+                                    },
+                                    '&:hover': {
+                                      bgcolor: 'rgba(255,255,255,0.03)',
+                                      borderColor: 'rgba(255,255,255,0.08)'
+                                    },
+                                    transition: 'all 0.2s ease'
+                                  }}
+                                >
+                                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                                    {idx === 0 ? 'Parent' : historyPlan.plan_id === plan.plan_id ? 'Current Child' : `Child ${idx}`} - Attempt {idx + 1} - <strong>{historyPlan.status.replace('_', ' ')}</strong>
+                                  </Typography>
+                                  <Typography variant="body2" color="rgba(255,255,255,0.7)" sx={{ fontSize: '0.8rem' }}>
+                                    {historyPlan.plan?.summary || 'Remediation proposal'}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontFamily: 'monospace', opacity: 0.75 }}>
+                                    {historyPlan.plan_id}
+                                  </Typography>
+                                </Paper>
+                              ))}
+                            </Stack>
+                          </Collapse>
+                        </Box>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -685,13 +1038,13 @@ function RemediationContent() {
 
           {/* Context Sidebar */}
           <Grid item xs={12} lg={3.5}>
-            <Card 
+            <Card
               className="glass"
-              sx={{ 
-                borderRadius: 4, 
+              sx={{
+                borderRadius: 1,
                 border: '1px solid rgba(255,255,255,0.06)',
                 position: 'sticky',
-                top: 96
+                top: 24
               }}
             >
               <CardContent sx={{ p: 4 }}>
@@ -700,32 +1053,129 @@ function RemediationContent() {
                 </Typography>
                 <Divider sx={{ my: 2, borderColor: 'rgba(255,255,255,0.06)' }} />
                 <Stack spacing={3}>
-                  <Box 
-                    sx={{ 
-                      p: 2.5, 
-                      borderRadius: 3, 
-                      bgcolor: 'rgba(16, 185, 129, 0.05)', 
-                      border: '1px solid rgba(16, 185, 129, 0.15)', 
-                      display: 'flex', 
-                      alignItems: 'center', 
+                  <Box
+                    sx={{
+                      p: 2.5,
+                      borderRadius: 1,
+                      bgcolor: getGeminiStatusMeta().background,
+                      border: `1px solid ${getGeminiStatusMeta().border}`,
+                      display: 'flex',
+                      alignItems: 'center',
                       gap: 2,
-                      boxShadow: '0 0 16px rgba(16, 185, 129, 0.03)'
+                      boxShadow: `0 0 16px ${getGeminiStatusMeta().shadow}`
                     }}
                   >
-                    <Cpu className="text-emerald-400" size={20} />
-                    <Typography variant="body2" fontWeight="600" color="emerald.100" sx={{ fontSize: '0.8rem' }}>
-                      AI Agent: Operational
+                    {geminiConnection.status === 'checking' ? (
+                      <Loader2 className={`${getGeminiStatusMeta().iconClass} animate-spin`} size={20} />
+                    ) : geminiConnection.status === 'success' ? (
+                      <Cpu className={getGeminiStatusMeta().iconClass} size={20} />
+                    ) : (
+                      <AlertTriangle className={getGeminiStatusMeta().iconClass} size={20} />
+                    )}
+                    <Typography variant="body2" fontWeight="600" sx={{ fontSize: '0.8rem', color: getGeminiStatusMeta().color }}>
+                      {getGeminiStatusMeta().label}
                     </Typography>
                   </Box>
                   <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem', lineHeight: 1.6 }}>
-                    Remediation plans are generated autonomously based on real-time container log analysis and K8s deployment structures. Approving a proposal safely patch-injects configurations and triggers structured rolling updates with instant cluster-health diagnostics.
+                    {getGeminiStatusMeta().description}
                   </Typography>
+                  {geminiConnection.status !== 'checking' && (
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.72rem', lineHeight: 1.5 }}>
+                      {geminiConnection.message}
+                    </Typography>
+                  )}
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={fetchGeminiConnection}
+                    disabled={geminiConnection.status === 'checking'}
+                    sx={{
+                      alignSelf: 'flex-start',
+                      borderColor: `${getGeminiStatusMeta().color}55`,
+                      color: getGeminiStatusMeta().color,
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      borderRadius: 2,
+                      '&:hover': {
+                        borderColor: getGeminiStatusMeta().color,
+                        bgcolor: getGeminiStatusMeta().background
+                      }
+                    }}
+                  >
+                    {geminiConnection.status === 'checking' ? 'Checking...' : 'Recheck Gemini'}
+                  </Button>
                 </Stack>
               </CardContent>
             </Card>
           </Grid>
         </Grid>
       )}
+
+      {/* Manifest Editor Dialog */}
+      <Dialog
+        open={manifestDialogOpen}
+        onClose={() => setManifestDialogOpen(false)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: 'rgba(9, 13, 22, 0.97)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.8)',
+            borderRadius: 4
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: 'white', px: 4, pt: 4 }}>
+          <Typography variant="h6" fontWeight="800">
+            Edit Pod Manifest
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+            {manifestTarget ? `${manifestTarget.namespace}/${manifestTarget.name}` : 'No target selected'}
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 4 }}>
+          <TextField
+            value={manifestYaml}
+            onChange={(event) => setManifestYaml(event.target.value)}
+            multiline
+            minRows={20}
+            fullWidth
+            spellCheck={false}
+            sx={{
+              mt: 2,
+              '& .MuiInputBase-root': {
+                color: 'rgba(255,255,255,0.88)',
+                fontFamily: 'monospace',
+                fontSize: '0.78rem',
+                bgcolor: 'rgba(2, 6, 23, 0.75)',
+                borderRadius: 3
+              },
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'rgba(255,255,255,0.08)'
+              }
+            }}
+          />
+          <Alert severity="warning" variant="outlined" sx={{ mt: 2, borderRadius: 3, color: '#fbbf24', borderColor: 'rgba(251,191,36,0.3)' }}>
+            Some Pod fields are immutable. For image fixes, edit the container image and apply; if Kubernetes rejects immutable fields, delete/recreate the pod or apply a clean manifest.
+          </Alert>
+        </DialogContent>
+        <DialogActions sx={{ p: 4, pt: 2 }}>
+          <Button onClick={() => setManifestDialogOpen(false)} sx={{ color: 'text.secondary', fontWeight: 'bold' }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={actionLoading === 'apply-manifest' ? <Loader2 className="animate-spin" size={16} /> : <FileText size={16} />}
+            onClick={handleApplyManifest}
+            disabled={actionLoading !== null || !manifestYaml.trim()}
+            sx={{ borderRadius: 2.5, fontWeight: 'bold', textTransform: 'none', px: 3 }}
+          >
+            Apply Manifest
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Plan Details Dialog */}
       <Dialog 

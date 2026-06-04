@@ -102,6 +102,25 @@ SENSITIVE_FIELDS = {
 }
 
 
+def _env_enabled(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _production_arize_required(environment: str) -> bool:
+    return environment == "production" and _env_enabled("ARIZE_REQUIRE_DASHBOARD", False)
+
+
+def _missing_required_message() -> str:
+    return (
+        "Arize tracing is required for production audit mode but no valid Arize Cloud "
+        "credentials (ARIZE_SPACE_ID, ARIZE_API_KEY) or OTLP/Phoenix collector endpoint "
+        "(PHOENIX_COLLECTOR_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT) are configured."
+    )
+
+
 def _sanitize_headers(headers: Optional[dict]) -> Optional[dict]:
     """Redact sensitive headers from traces."""
     if not headers:
@@ -144,12 +163,18 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
     Returns:
         TracerProvider if successfully initialized, None if unconfigured or failed.
     """
+    environment = os.getenv("ENVIRONMENT", "").lower()
     if not HAS_OTEL:
+        if _production_arize_required(environment):
+            raise RuntimeError("Arize tracing is required but OpenTelemetry libraries are not installed.")
         logger.info("Arize/OTel tracing is inactive (OpenTelemetry libraries not installed).")
         return None
-    
-    environment = os.getenv("ENVIRONMENT", "").lower()
-    
+
+    arize_enabled = _env_enabled("ARIZE_ENABLED", True)
+    if not arize_enabled and not _production_arize_required(environment):
+        logger.info("Arize/OTel tracing is disabled by ARIZE_ENABLED=false.")
+        return None
+
     # Get config variables
     space_id = os.getenv("ARIZE_SPACE_ID")
     api_key = os.getenv("ARIZE_API_KEY")
@@ -163,12 +188,10 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
     is_local_ready = bool(phoenix_endpoint)
     
     if not (is_cloud_ready or is_local_ready):
-        if environment == "production":
-            logger.warning(
-                "Arize tracing not initialized: ENVIRONMENT is production but neither "
-                "Arize Cloud credentials (ARIZE_SPACE_ID, ARIZE_API_KEY) nor "
-                "local collector endpoints (PHOENIX_COLLECTOR_ENDPOINT) are set."
-            )
+        if _production_arize_required(environment):
+            raise RuntimeError(_missing_required_message())
+        elif environment == "production":
+            logger.warning(_missing_required_message())
         else:
             logger.info("Arize/OTel tracing is inactive (unconfigured).")
         return None
@@ -176,6 +199,8 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
     try:
         if is_cloud_ready:
             if not HAS_ARIZE:
+                if _production_arize_required(environment):
+                    raise RuntimeError("Arize Cloud mode is required but arize-otel package is not installed.")
                 logger.error("Arize Cloud mode requested but arize-otel package is not installed.")
                 return None
             logger.info(f"Initializing Arize Cloud tracing (Project: {project_name})...")
@@ -238,6 +263,8 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
         return tracer_provider
         
     except Exception as e:
+        if _production_arize_required(environment):
+            raise
         logging.exception(f"Failed to initialize Arize/OTel tracing: {e}", exc_info=True)
         return None
 
@@ -245,3 +272,18 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
 def get_tracer(name: str = "kubi") -> trace.Tracer:
     """Get a tracer instance for creating custom spans."""
     return trace.get_tracer(name)
+
+
+def set_span_attributes(span, metadata: Optional[dict]) -> None:
+    if not metadata:
+        return
+    sanitized = _sanitize_dict(metadata)
+    for key, value in sanitized.items():
+        if value is None:
+            continue
+        if isinstance(value, (str, int, float, bool)):
+            span.set_attribute(key, value)
+        elif isinstance(value, list) and all(isinstance(item, (str, int, float, bool)) for item in value):
+            span.set_attribute(key, value)
+        else:
+            span.set_attribute(key, str(value))

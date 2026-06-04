@@ -104,6 +104,37 @@ class TestArizeTracing(unittest.TestCase):
     @patch('app.core.arize_tracing.RequestsInstrumentor')
     @patch('app.core.arize_tracing.HTTPXClientInstrumentor')
     @patch('app.core.arize_tracing.trace')
+    def test_initialize_arize_tracing_local_disabled(
+        self, mock_trace, mock_httpx, mock_requests, mock_fastapi, mock_gemini, mock_register
+    ):
+        with patch.dict(os.environ, {"ENVIRONMENT": "local", "ARIZE_ENABLED": "false"}, clear=True):
+            result = initialize_arize_tracing()
+            self.assertIsNone(result)
+            mock_register.assert_not_called()
+
+    @patch('app.core.arize_tracing.register')
+    @patch('app.core.arize_tracing.GoogleGenAIInstrumentor')
+    @patch('app.core.arize_tracing.FastAPIInstrumentor')
+    @patch('app.core.arize_tracing.RequestsInstrumentor')
+    @patch('app.core.arize_tracing.HTTPXClientInstrumentor')
+    @patch('app.core.arize_tracing.trace')
+    def test_initialize_arize_tracing_production_required_missing_config(
+        self, mock_trace, mock_httpx, mock_requests, mock_fastapi, mock_gemini, mock_register
+    ):
+        env_config = {
+            "ENVIRONMENT": "production",
+            "ARIZE_REQUIRE_DASHBOARD": "true",
+        }
+        with patch.dict(os.environ, env_config, clear=True):
+            with self.assertRaises(RuntimeError):
+                initialize_arize_tracing()
+
+    @patch('app.core.arize_tracing.register')
+    @patch('app.core.arize_tracing.GoogleGenAIInstrumentor')
+    @patch('app.core.arize_tracing.FastAPIInstrumentor')
+    @patch('app.core.arize_tracing.RequestsInstrumentor')
+    @patch('app.core.arize_tracing.HTTPXClientInstrumentor')
+    @patch('app.core.arize_tracing.trace')
     def test_initialize_arize_tracing_cloud_mode(
         self, mock_trace, mock_httpx, mock_requests, mock_fastapi, mock_gemini, mock_register
     ):

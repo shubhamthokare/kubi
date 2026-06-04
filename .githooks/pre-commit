@@ -1,0 +1,11 @@
+#!/bin/sh
+
+frontend_dir="apps/frontend"
+react_doctor="$frontend_dir/node_modules/.bin/react-doctor"
+
+if [ ! -x "$react_doctor" ]; then
+  printf '%s\n' "React Doctor is not installed; skipping staged frontend scan."
+  exit 0
+fi
+
+"$react_doctor" "$frontend_dir" --staged --fail-on error --no-telemetry

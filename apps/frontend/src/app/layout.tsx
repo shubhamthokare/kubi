@@ -35,7 +35,7 @@ const darkTheme = createTheme({
     fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
   },
   shape: {
-    borderRadius: 16,
+    borderRadius: 8,
   },
 });
 
@@ -99,8 +99,15 @@ function Layout({ children }: { children: React.ReactNode }) {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <Navbar />
-      <Box sx={{ maxWidth: 'xl', mx: 'auto', px: 3, py: 4 }}>
-        {/* Page Content */}
+      <Box
+        component="main"
+        sx={{
+          maxWidth: 1480,
+          mx: 'auto',
+          px: { xs: 2, sm: 3, lg: 4 },
+          py: { xs: 3, md: 4 },
+        }}
+      >
         {children}
       </Box>
     </Box>

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Activity, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { Box, Stack, Typography, Button, Container, TextField, Alert, CircularProgress, InputAdornment, IconButton } from '@mui/material';
 import { SreAuthCard } from '@/components/ui/sre-layout';
+import { readApiResponse } from '@/lib/api';
 
 export default function LoginPage() {
   const [email, setEmail] = React.useState('');
@@ -28,7 +29,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       
-      const data = await res.json();
+      const data = await readApiResponse(res);
       
       if (!res.ok) {
         // If account is unverified, backend returns 403 with 'email_not_verified' detail

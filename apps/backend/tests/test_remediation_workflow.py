@@ -29,6 +29,22 @@ class TestRemediationWorkflow(unittest.IsolatedAsyncioTestCase):
         call_args = mock_db.plans.insert_one.call_args[0][0]
         self.assertEqual(call_args["plan_id"], plan_id)
         self.assertEqual(call_args["status"], "pending_approval")
+        self.assertEqual(call_args["generated_by"], "ai")  # Default value
+
+    @patch('app.workflows.remediation_workflow.get_db')
+    async def test_store_plan_with_generated_by(self, mock_get_db):
+        mock_db = MagicMock()
+        mock_db.plans.insert_one = AsyncMock()
+        mock_get_db.return_value = mock_db
+        
+        mock_plan = MagicMock()
+        mock_plan.model_dump.return_value = {"actions": []}
+        
+        plan_id = await self.workflow.store_plan(mock_plan, generated_by="rule-based")
+        
+        self.assertIsNotNone(plan_id)
+        call_args = mock_db.plans.insert_one.call_args[0][0]
+        self.assertEqual(call_args["generated_by"], "rule-based")
 
     @patch('app.workflows.remediation_workflow.get_db')
     async def test_reject_plan_success(self, mock_get_db):

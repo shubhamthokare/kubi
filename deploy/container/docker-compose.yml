@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
@@ -57,16 +55,37 @@ services:
       - "8000:8000"
     environment:
       - MONGODB_URL=mongodb://mongodb:27017
-      - DATABASE_NAME=kubeguardian
-      - AGENT_URL=http://agent:8080
+      - DATABASE_NAME=${DATABASE_NAME:-kubi}
+      - AGENT_URL=${DOCKER_AGENT_URL:-http://agent:8080}
+      - BACKEND_URL=${BACKEND_URL:-http://backend.kubi.kontactless.in}
+      - FRONTEND_URL=${FRONTEND_URL:-http://kubi.kontactless.in}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ELASTICSEARCH_HOST=http://elasticsearch:9200
-      - ELASTICSEARCH_INDEX=kubiguard-incidents
-      - ENVIRONMENT=${ENVIRONMENT:-production}
-      - ARIZE_SPACE_ID=${ARIZE_SPACE_ID}
-      - ARIZE_API_KEY=${ARIZE_API_KEY}
-      - ARIZE_PROJECT_NAME=kubi-prod-backend
-      - PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT}
+      - ELASTICSEARCH_INDEX=${ELASTICSEARCH_INDEX:-kubi-incidents}
+      - ELASTICSEARCH_INDEX_LOGS=${ELASTICSEARCH_INDEX_LOGS:-kubi-pod-logs}
+      - ELASTICSEARCH_INDEX_EVENTS=${ELASTICSEARCH_INDEX_EVENTS:-kubi-events}
+      - ELASTICSEARCH_INDEX_RCA=${ELASTICSEARCH_INDEX_RCA:-kubi-rca}
+      - ELASTICSEARCH_INDEX_REMEDIATION=${ELASTICSEARCH_INDEX_REMEDIATION:-kubi-remediation}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000,http://kubi.kontactless.in,http://backend.kubi.kontactless.in,http://agent.kubi.kontactless.in}
+      - ENVIRONMENT=${ENVIRONMENT:-local}
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-auto}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - EMAIL_FROM=${EMAIL_FROM:-no-reply@kubi.ai}
+      - SMTP_HOST=${SMTP_HOST:-smtp.resend.com}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_USERNAME=${SMTP_USERNAME:-resend}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_USE_SSL=${SMTP_USE_SSL:-true}
+      - SMTP_USE_TLS=${SMTP_USE_TLS:-false}
+      - EMAIL_SENDER_POOL=${EMAIL_SENDER_POOL:-}
+      - EMAIL_SENDER_MONTHLY_LIMIT=${EMAIL_SENDER_MONTHLY_LIMIT:-3000}
+      - EMAIL_SENDER_SWITCH_AFTER=${EMAIL_SENDER_SWITCH_AFTER:-2900}
+      - EMAIL_SENDER_USAGE_COLLECTION=${EMAIL_SENDER_USAGE_COLLECTION:-email_sender_usage}
+      - ARIZE_SPACE_ID=${ARIZE_SPACE_ID:-}
+      - ARIZE_API_KEY=${ARIZE_API_KEY:-}
+      - ARIZE_PROJECT_NAME=${ARIZE_PROJECT_NAME:-kubi-docker-backend}
+      - ARIZE_REQUIRE_DASHBOARD=${ARIZE_REQUIRE_DASHBOARD:-false}
+      - PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT:-}
     depends_on:
       - mongodb
       - elasticsearch
@@ -82,15 +101,16 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - KUBI_BACKEND_URL=http://be:8000
-      - CLUSTER_ID=local-minikube
-      - TARGET_NAMESPACE=*
-      - SCAN_INTERVAL=30
-      - ENVIRONMENT=${ENVIRONMENT:-production}
-      - ARIZE_SPACE_ID=${ARIZE_SPACE_ID}
-      - ARIZE_API_KEY=${ARIZE_API_KEY}
-      - ARIZE_PROJECT_NAME=kubi-prod-agent
-      - PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT}
+      - KUBI_BACKEND_URL=${DOCKER_BACKEND_URL:-http://be:8000}
+      - CLUSTER_ID=${CLUSTER_ID:-local-docker}
+      - TARGET_NAMESPACE=${TARGET_NAMESPACE:-*}
+      - SCAN_INTERVAL=${SCAN_INTERVAL:-30}
+      - ENVIRONMENT=${ENVIRONMENT:-local}
+      - ARIZE_SPACE_ID=${ARIZE_SPACE_ID:-}
+      - ARIZE_API_KEY=${ARIZE_API_KEY:-}
+      - ARIZE_PROJECT_NAME=${ARIZE_AGENT_PROJECT_NAME:-kubi-docker-agent}
+      - ARIZE_REQUIRE_DASHBOARD=${ARIZE_REQUIRE_DASHBOARD:-false}
+      - PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT:-}
     volumes:
       - C:\Users\shubh\.minikube:/root/.minikube:ro
       - ../kubeconfig:/root/.kube/config:ro
@@ -110,8 +130,10 @@ services:
     ports:
       - "3000:80"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api
-      - BACKEND_URL=http://be:8000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://backend.kubi.kontactless.in/api}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://kubi.kontactless.in}
+      - NEXT_PUBLIC_AGENT_URL=${NEXT_PUBLIC_AGENT_URL:-http://agent.kubi.kontactless.in}
+      - BACKEND_URL=${DOCKER_BACKEND_URL:-http://be:8000}
     depends_on:
       - be
     networks:
@@ -127,8 +149,8 @@ services:
       - ../../:/app
 
     environment:
-      - KUBECONFIG_CONTENT=${KUBECONFIG_CONTENT}
-      - APP_URL=http://host.docker.internal:3000
+      - KUBECONFIG_CONTENT=${KUBECONFIG_CONTENT:-}
+      - APP_URL=${APP_URL:-http://host.docker.internal:3000}
 
     extra_hosts:
       - "host.docker.internal:host-gateway"

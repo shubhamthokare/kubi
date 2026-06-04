@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
+import requests
 from app.services.kubernetes_service import KubernetesService
 
 class TestKubernetesService(unittest.TestCase):
@@ -46,6 +47,19 @@ class TestKubernetesService(unittest.TestCase):
         is_healthy = self.service.verify_pod_health("pod-1", "default")
         self.assertTrue(is_healthy)
         mock_failed_pods.assert_called_once_with(["default"])
+
+    @patch('app.services.kubernetes_service.requests.post')
+    def test_rollback_missing_agent_endpoint_has_clear_message(self, mock_post):
+        response = MagicMock()
+        response.status_code = 404
+        response.raise_for_status.side_effect = requests.HTTPError(response=response)
+        mock_post.return_value = response
+
+        ok, message = self.service.rollback_deployment("missing-route", "default")
+
+        self.assertFalse(ok)
+        self.assertIn("Agent endpoint not found", message)
+        self.assertIn("/actions/rollback/default/missing-route", message)
 
 if __name__ == '__main__':
     unittest.main()

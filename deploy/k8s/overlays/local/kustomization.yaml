@@ -6,11 +6,209 @@ namespace: kubi
 resources:
   - ../../base/
   - ../../secrets/local/
-  # ingress.yaml removed - using local nginx Docker container instead (local-dev/)
+  - ingress.yaml
 
 patches:
   - path: configmap-patch.yaml
+  - target:
+      kind: Deployment
+      name: kubi-backend
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: kubi-backend
+      spec:
+        template:
+          spec:
+            containers:
+              - name: backend
+                env:
+                  - name: ENVIRONMENT
+                    value: development
+                  - name: ARIZE_PROJECT_NAME
+                    value: kubi-local-backend
+  - target:
+      kind: Deployment
+      name: kubi-agent
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: kubi-agent
+      spec:
+        template:
+          spec:
+            containers:
+              - name: agent
+                env:
+                  - name: ENVIRONMENT
+                    value: development
+                  - name: ARIZE_PROJECT_NAME
+                    value: kubi-local-agent
 
+configMapGenerator:
+  - name: kubi-local-config
+    envs:
+      - .env
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: kubi-local-config
+      fieldPath: data.BACKEND_URL
+    targets:
+      - select:
+          kind: ConfigMap
+          name: kubi-config
+        fieldPaths:
+          - data.BACKEND_URL
+        options:
+          create: true
+  - source:
+      kind: ConfigMap
+      name: kubi-local-config
+      fieldPath: data.AGENT_URL
+    targets:
+      - select:
+          kind: ConfigMap
+          name: kubi-config
+        fieldPaths:
+          - data.AGENT_URL
+        options:
+          create: true
+  - source:
+      kind: ConfigMap
+      name: kubi-local-config
+      fieldPath: data.FRONTEND_URL
+    targets:
+      - select:
+          kind: ConfigMap
+          name: kubi-config
+        fieldPaths:
+          - data.FRONTEND_URL
+        options:
+          create: true
+  - source:
+      kind: ConfigMap
+      name: kubi-local-config
+      fieldPath: data.EMAIL_PROVIDER
+    targets:
+      - select:
+          kind: ConfigMap
+          name: kubi-config
+        fieldPaths:
+          - data.EMAIL_PROVIDER
+        options:
+          create: true
+  - source:
+      kind: ConfigMap
+      name: kubi-local-config
+      fieldPath: data.EMAIL_FROM
+    targets:
+      - select:
+          kind: ConfigMap
+          name: kubi-config
+        fieldPaths:
+          - data.EMAIL_FROM
+        options:
+          create: true
+  - source:
+      kind: ConfigMap
+      name: kubi-local-config
+      fieldPath: data.SMTP_HOST
+    targets:
+      - select:
+          kind: ConfigMap
+          name: kubi-config
+        fieldPaths:
+          - data.SMTP_HOST
+        options:
+          create: true
+  - source:
+      kind: ConfigMap
+      name: kubi-local-config
+      fieldPath: data.SMTP_PORT
+    targets:
+      - select:
+          kind: ConfigMap
+          name: kubi-config
+        fieldPaths:
+          - data.SMTP_PORT
+        options:
+          create: true
+  - source:
+      kind: ConfigMap
+      name: kubi-local-config
+      fieldPath: data.SMTP_USERNAME
+    targets:
+      - select:
+          kind: ConfigMap
+          name: kubi-config
+        fieldPaths:
+          - data.SMTP_USERNAME
+        options:
+          create: true
+  - source:
+      kind: ConfigMap
+      name: kubi-local-config
+      fieldPath: data.SMTP_USE_SSL
+    targets:
+      - select:
+          kind: ConfigMap
+          name: kubi-config
+        fieldPaths:
+          - data.SMTP_USE_SSL
+        options:
+          create: true
+  - source:
+      kind: ConfigMap
+      name: kubi-local-config
+      fieldPath: data.SMTP_USE_TLS
+    targets:
+      - select:
+          kind: ConfigMap
+          name: kubi-config
+        fieldPaths:
+          - data.SMTP_USE_TLS
+        options:
+          create: true
+  - source:
+      kind: ConfigMap
+      name: kubi-local-config
+      fieldPath: data.EMAIL_SENDER_MONTHLY_LIMIT
+    targets:
+      - select:
+          kind: ConfigMap
+          name: kubi-config
+        fieldPaths:
+          - data.EMAIL_SENDER_MONTHLY_LIMIT
+        options:
+          create: true
+  - source:
+      kind: ConfigMap
+      name: kubi-local-config
+      fieldPath: data.EMAIL_SENDER_SWITCH_AFTER
+    targets:
+      - select:
+          kind: ConfigMap
+          name: kubi-config
+        fieldPaths:
+          - data.EMAIL_SENDER_SWITCH_AFTER
+        options:
+          create: true
+  - source:
+      kind: ConfigMap
+      name: kubi-local-config
+      fieldPath: data.EMAIL_SENDER_USAGE_COLLECTION
+    targets:
+      - select:
+          kind: ConfigMap
+          name: kubi-config
+        fieldPaths:
+          - data.EMAIL_SENDER_USAGE_COLLECTION
+        options:
+          create: true
 images:
   - name: kubi-agent
     newName: kubi-agent

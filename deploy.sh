@@ -23,6 +23,7 @@ Scenarios:
   render-prod        Render the production Kustomize overlay
   secrets-local      Apply local dummy Kubernetes secrets
   secrets-gcp        Apply GCP External Secrets resources
+  generate-secrets   Generate dummy secret templates ([local|gcp])
 
 Aliases:
   start, dev -> start-local
@@ -81,7 +82,7 @@ fi
 
 initialize_and_propagate_secrets() {
   local root_env="$ROOT/.env"
-  local root_example="$ROOT/.env.example"
+  local root_example="$ROOT/.example.env"
   local backend_env="$ROOT/apps/backend/.env"
 
   # 1. Centralization bootstrapping
@@ -96,15 +97,64 @@ initialize_and_propagate_secrets() {
     fi
   fi
 
+  # 1.5. Self-heal missing local & GCP secrets files from templates
+  if [ ! -f "$ROOT/deploy/k8s/secrets/local/.env.local" ] && [ -f "$ROOT/.example.env.local" ]; then
+    mkdir -p "$ROOT/deploy/k8s/secrets/local"
+    cp "$ROOT/.example.env.local" "$ROOT/deploy/k8s/secrets/local/.env.local"
+  fi
+  if [ ! -f "$ROOT/deploy/k8s/secrets/external/gcp/.env.gcp" ] && [ -f "$ROOT/.example.env.gcp" ]; then
+    mkdir -p "$ROOT/deploy/k8s/secrets/external/gcp"
+    cp "$ROOT/.example.env.gcp" "$ROOT/deploy/k8s/secrets/external/gcp/.env.gcp"
+  fi
+
   # 2. Load env variables into current session
   echo "Loading master secrets from $root_env..."
-  export $(grep -v '^#' "$root_env" | grep -v '=\${' | xargs)
+  while IFS= read -r line || [ -n "$line" ]; do
+    local trimmed="${line#"${line%%[![:space:]]*}"}"
+    trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+    if [[ "$trimmed" =~ ^# ]] || [[ -z "$trimmed" ]] || [[ "$trimmed" != *"="* ]]; then
+      continue
+    fi
+
+    local key="${trimmed%%=*}"
+    local value="${trimmed#*=}"
+    key="${key%"${key##*[![:space:]]}"}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    if [[ "$value" == "\${"* ]]; then
+      continue
+    fi
+    export "$key=$value"
+  done < "$root_env"
+
+  # Local overlay URL defaults. These can still be overridden in the root .env.
+  local local_domain="${LOCAL_DOMAIN:-kubi.kontactless.in}"
+  export FRONTEND_URL="${FRONTEND_URL:-http://$local_domain}"
+  export BACKEND_URL="${BACKEND_URL:-http://backend.$local_domain}"
+  export AGENT_URL="${AGENT_URL:-http://agent.$local_domain}"
+  export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-$BACKEND_URL/api}"
+  export NEXT_PUBLIC_APP_URL="${NEXT_PUBLIC_APP_URL:-$FRONTEND_URL}"
+  export NEXT_PUBLIC_AGENT_URL="${NEXT_PUBLIC_AGENT_URL:-$AGENT_URL}"
+  export APP_URL="${APP_URL:-$FRONTEND_URL}"
+  export EMAIL_PROVIDER="${EMAIL_PROVIDER:-auto}"
+  export SMTP_HOST="${SMTP_HOST:-smtp.resend.com}"
+  export SMTP_PORT="${SMTP_PORT:-465}"
+  export SMTP_USERNAME="${SMTP_USERNAME:-resend}"
+  export SMTP_USE_SSL="${SMTP_USE_SSL:-true}"
+  export SMTP_USE_TLS="${SMTP_USE_TLS:-false}"
+  export EMAIL_SENDER_MONTHLY_LIMIT="${EMAIL_SENDER_MONTHLY_LIMIT:-3000}"
+  export EMAIL_SENDER_SWITCH_AFTER="${EMAIL_SENDER_SWITCH_AFTER:-2900}"
+  export EMAIL_SENDER_USAGE_COLLECTION="${EMAIL_SENDER_USAGE_COLLECTION:-email_sender_usage}"
+  export SMTP_PASSWORD="${SMTP_PASSWORD:-${RESEND_API_KEY:-}}"
+  if [ -n "${EMAIL_SENDER_POOL:-}" ]; then
+    echo "Email sender pool configured; monthly switch threshold: ${EMAIL_SENDER_SWITCH_AFTER}"
+  fi
 
   # 3. Propagate relevant secrets to each component based on schema
-  local backend_keys="ENVIRONMENT PROJECT_NAME LOG_LEVEL GEMINI_API_KEY MONGODB_URL DATABASE_NAME GITLAB_API_URL GITLAB_PRIVATE_TOKEN GITLAB_TOKEN AGENT_URL CORS_ORIGINS CORS_ORIGIN_REGEX ELASTICSEARCH_HOST ELASTICSEARCH_INDEX ELASTICSEARCH_INDEX_LOGS ELASTICSEARCH_INDEX_EVENTS ELASTICSEARCH_INDEX_RCA ELASTICSEARCH_INDEX_REMEDIATION ELASTICSEARCH_USERNAME ELASTICSEARCH_PASSWORD ELASTICSEARCH_API_KEY ELASTICSEARCH_SHARDS ELASTICSEARCH_REPLICAS RESEND_API_KEY EMAIL_FROM OTP_EXPIRY_MINUTES JWT_SECRET_KEY ARIZE_SPACE_ID ARIZE_API_KEY ARIZE_PROJECT_NAME GLOBAL_DOMAIN LOCAL_DOMAIN SERVICE_SUBDOMAIN DOMAIN_NAME"
+  local backend_keys="ENVIRONMENT PROJECT_NAME LOG_LEVEL GEMINI_API_KEY MONGODB_URL DATABASE_NAME GITLAB_API_URL GITLAB_PRIVATE_TOKEN GITLAB_TOKEN AGENT_URL CORS_ORIGINS CORS_ORIGIN_REGEX ELASTICSEARCH_HOST ELASTICSEARCH_INDEX ELASTICSEARCH_INDEX_LOGS ELASTICSEARCH_INDEX_EVENTS ELASTICSEARCH_INDEX_RCA ELASTICSEARCH_INDEX_REMEDIATION ELASTICSEARCH_USERNAME ELASTICSEARCH_PASSWORD ELASTICSEARCH_API_KEY ELASTICSEARCH_SHARDS ELASTICSEARCH_REPLICAS EMAIL_PROVIDER RESEND_API_KEY EMAIL_FROM SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_PASSWORD SMTP_USE_SSL SMTP_USE_TLS EMAIL_SENDER_POOL EMAIL_SENDER_MONTHLY_LIMIT EMAIL_SENDER_SWITCH_AFTER EMAIL_SENDER_USAGE_COLLECTION OTP_EXPIRY_MINUTES JWT_SECRET_KEY ARIZE_SPACE_ID ARIZE_API_KEY ARIZE_PROJECT_NAME GLOBAL_DOMAIN LOCAL_DOMAIN SERVICE_SUBDOMAIN DOMAIN_NAME"
   local agent_keys="CLUSTER_ID TARGET_NAMESPACE SCAN_INTERVAL KUBECONFIG KUBI_BACKEND_URL GEMINI_API_KEY LOG_LEVEL ARIZE_SPACE_ID ARIZE_API_KEY ARIZE_PROJECT_NAME PHOENIX_COLLECTOR_ENDPOINT"
   local frontend_keys="NEXT_PUBLIC_API_URL NEXT_PUBLIC_APP_URL NEXT_PUBLIC_AGENT_URL"
-  local k8s_keys="DB_PASSWORD RESEND_API_KEY JWT_SECRET_KEY GEMINI_API_KEY GITLAB_TOKEN ARIZE_SPACE_ID ARIZE_API_KEY SSO_CLIENT_ID SSO_CLIENT_SECRET"
+  local k8s_keys="DB_PASSWORD RESEND_API_KEY SMTP_PASSWORD EMAIL_SENDER_POOL JWT_SECRET_KEY GEMINI_API_KEY GITLAB_TOKEN ARIZE_SPACE_ID ARIZE_API_KEY SSO_CLIENT_ID SSO_CLIENT_SECRET"
   local playwright_keys="MONGODB_URL DATABASE_NAME APP_URL"
 
   propagate_filtered() {
@@ -131,14 +181,24 @@ initialize_and_propagate_secrets() {
         fi
       fi
     done < "$root_env"
+
+    for key in $allowed_keys; do
+      if ! grep -qE "^[[:space:]]*$key=" "$target"; then
+        local value="${!key:-}"
+        if [ -n "$value" ]; then
+          echo "$key=$value" >> "$target"
+        fi
+      fi
+    done
     echo "Synchronized: ${target#$ROOT/} (filtered)"
   }
 
   propagate_filtered "$ROOT/apps/backend/.env" "$backend_keys"
   propagate_filtered "$ROOT/apps/agent/.env" "$agent_keys"
   propagate_filtered "$ROOT/apps/frontend/.env.local" "$frontend_keys"
-  propagate_filtered "$ROOT/deploy/k8s/secrets/local/local.env" "$k8s_keys"
+  propagate_filtered "$ROOT/deploy/k8s/secrets/local/.env.local" "$k8s_keys"
   propagate_filtered "$ROOT/deploy/local/playwright/.env" "$playwright_keys"
+  propagate_filtered "$ROOT/deploy/k8s/overlays/local/.env" "BACKEND_URL AGENT_URL FRONTEND_URL EMAIL_PROVIDER EMAIL_FROM SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_USE_SSL SMTP_USE_TLS EMAIL_SENDER_MONTHLY_LIMIT EMAIL_SENDER_SWITCH_AFTER EMAIL_SENDER_USAGE_COLLECTION"
 }
 
 # Run secrets setup
@@ -178,7 +238,11 @@ case "$scenario" in
         echo -e "${SUCCESS}Deployment Complete! All services started in the background.${NC}"
         echo -e "--------------------------------------------------"
         echo -e "${SUCCESS}Access the Dashboard at:${NC}"
+        echo -e "  ${FRONTEND_URL}"
         echo -e "  http://localhost:3000"
+        echo -e "${SUCCESS}Backend API:${NC}"
+        echo -e "  ${BACKEND_URL}"
+        echo -e "  http://localhost:8000"
         echo -e ""
         echo -e "${INFO}Monitor the status of your services:${NC}"
         echo -e "  docker compose -f deploy/container/docker-compose.yml ps"
@@ -480,6 +544,42 @@ case "$scenario" in
     pkill -f "next/dist/bin/next" 2>/dev/null || true
     echo "  kubectl port-forwards and background jobs stopped."
     echo "Done."
+    ;;
+
+  generate-secrets)
+    mode="${1:-all}"
+
+    generate() {
+      local src="$1"
+      local dest="$2"
+      if [ -f "$dest" ]; then
+        echo "Already exists: $dest"
+      else
+        cp "$src" "$dest"
+        echo "Created $dest with dummy values."
+      fi
+    }
+
+    case "$mode" in
+      local)
+        generate ".example.env.local" "deploy/k8s/secrets/local/.env.local"
+        ;;
+      gcp)
+        generate ".example.env.gcp" "deploy/k8s/secrets/external/gcp/.env.gcp"
+        ;;
+      all)
+        generate ".example.env.local" "deploy/k8s/secrets/local/.env.local"
+        generate ".example.env.gcp" "deploy/k8s/secrets/external/gcp/.env.gcp"
+        ;;
+      help|-h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unknown mode '$mode'." >&2
+        exit 1
+        ;;
+    esac
     ;;
 
   *)

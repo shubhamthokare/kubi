@@ -105,6 +105,14 @@ This strategy builds and boots the core platform inside a local container networ
 *   **FastAPI Backend**: `http://localhost:8000`
 *   **Kibana Panel**: `http://localhost:5601`
 
+Docker Compose also accepts the same local public URL variables used by the Kubernetes overlay:
+*   `FRONTEND_URL` defaults to `http://kubi.kontactless.in`
+*   `BACKEND_URL` defaults to `http://backend.kubi.kontactless.in`
+*   `AGENT_URL` defaults to `http://agent.kubi.kontactless.in`
+*   `NEXT_PUBLIC_API_URL` defaults to `${BACKEND_URL}/api`
+
+Container-to-container traffic still uses Docker service names internally, such as `http://be:8000` for backend calls and `http://agent:8080` for agent calls.
+
 ```bash
 # PowerShell
 ./deploy.ps1 docker
@@ -122,17 +130,61 @@ docker compose -f deploy/container/docker-compose.yml up --build -d
 
 ### 2️⃣ Local Kubernetes In-Cluster Stack (Minikube)
 
-Deploys the production manifest overlays inside your active Minikube cluster and configures port forwarding for immediate access.
+Deploys the local manifest overlay inside your active Minikube cluster. The local overlay creates the Kubi Ingress object, but the Minikube ingress controller must be enabled separately before `http://kubi.kontactless.in` can open in a browser.
 
 ```bash
 # 1. Boot Minikube node
 minikube start --driver=docker
 
-# 2. PowerShell deployment
-./deploy.ps1 minikube -Prod
+# 2. Enable the Minikube ingress controller once per cluster
+minikube addons enable ingress
+kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=180s
 
-# 3. Bash deployment
-./deploy.sh minikube -Prod
+# 3. PowerShell deployment
+./deploy.ps1 minikube-local
+
+# 4. Bash deployment
+./deploy.sh minikube-local
+```
+
+For local URL configuration, `deploy.ps1` and `deploy.sh` write defaults into `deploy/k8s/overlays/local/.env`. Kustomize generates `kubi-local-config` from that file, then copies only `BACKEND_URL`, `AGENT_URL`, and `FRONTEND_URL` into the base `kubi-config` ConfigMap. This avoids manually editing `configmap-patch.yaml` for local URLs and avoids replacing the full base ConfigMap.
+
+#### Connecting Additional Kubernetes Clusters
+
+The recommended model is to deploy a Kubi agent inside each Kubernetes cluster and register its reachable URL in Kubi using agent authentication.
+
+```bash
+# Create the namespace, then deploy only the Kubi agent resources
+kubectl --context <remote-context> apply -f deploy/k8s/base/namespace.yaml
+kubectl --context <remote-context> apply -k deploy/k8s/agent
+```
+
+Select the agent URL based on where the Kubi backend runs:
+
+| Scenario | Cluster connection settings |
+| :--- | :--- |
+| Backend and agent are in the same cluster | `auth_type=agent`, `agent_url=http://kubi-agent-service.kubi.svc.cluster.local:8080` |
+| Backend reaches an agent through private DNS or an internal load balancer | `auth_type=agent`, `agent_url=http://<private-agent-host>:8080` |
+| Backend reaches an agent over an external ingress | `auth_type=agent`, `agent_url=https://agent.<remote-domain>` |
+| Local Minikube ingress testing | `auth_type=agent`, `agent_url=http://agent.kubi.kontactless.in` |
+
+Before registering an exposed agent, verify that the Kubi backend network can reach:
+
+```text
+GET <agent_url>/healthz
+GET <agent_url>/stats
+```
+
+External agent endpoints must use TLS and should require authentication, firewall restrictions, or private networking. The local Minikube URL `http://agent.kubi.kontactless.in` is intended only for local testing and is normally not reachable from a remote backend.
+
+The agent URL is not a Kubernetes API server endpoint. Do not use an agent URL with `auth_type=direct`, and do not place it in a kubeconfig `clusters[].cluster.server` field. Direct mode requires the real remote Kubernetes API endpoint plus restricted credentials:
+
+```text
+auth_type=direct
+api_endpoint=https://<remote-kubernetes-api>:6443
+ca_cert=<cluster-ca>
+client_cert=<restricted-client-certificate>
+client_key=<restricted-client-key>
 ```
 
 #### Adapted Host-to-Container Minikube Integration
@@ -308,6 +360,18 @@ kubectl apply -f deploy/fluent-bit-daemonset.yaml
 *   **Symptoms**: `Cannot connect to the Docker daemon. Is the docker daemon running?`
 *   **Fix**: Launch Docker Desktop, wait for the daemon initialization phase, and verify with `docker ps`.
 
+### ❌ Local Ingress Host Does Not Open
+*   **Symptoms**: Firefox or another browser cannot connect to `http://kubi.kontactless.in` after `./deploy.ps1 minikube-local`.
+*   **Cause**: The deployment applied the Kubi Ingress manifest, but the Minikube ingress controller is not running.
+*   **Fix**:
+    ```bash
+    minikube addons enable ingress
+    kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=180s
+    kubectl get pods -n ingress-nginx
+    kubectl get ingress -n kubi
+    ```
+*   **Fallback access**: Use `minikube service kubi-frontend-service -n kubi` if ingress is unavailable.
+
 ### ❌ Elasticsearch Boot Failures (OOM)
 *   **Symptoms**: The Elasticsearch pod repeatedly crashes or exits with code `137` (Out of Memory).
 *   **Fix**: Local Elasticsearch instances require at least 512MB to 1GB of dedicated heap memory. Increase Docker Desktop system memory allocation (recommend >= 4GB overall allocated resources).
@@ -316,6 +380,17 @@ kubectl apply -f deploy/fluent-bit-daemonset.yaml
 *   **Symptoms**: Agent log displays `SSLCertVerificationError: host.docker.internal does not match CA certificates`.
 *   **Fix**: Update targeted configuration properties in client definitions to bypass assert hostname validations:
     `configuration.assert_hostname = False`
+
+### Agent URL Returns 404 or Connects to Port 443
+*   **Symptoms**: Agent logs show `GET /api/v1/namespaces ... 404 Not Found`, or validation reports `Could not connect at agent.kubi.kontactless.in:443`.
+*   **Cause**: The agent URL was configured as a direct Kubernetes API endpoint, or HTTPS was used against the local HTTP-only Minikube ingress.
+*   **Fix**: Select agent authentication and use the complete URL:
+    ```text
+    auth_type=agent
+    agent_url=http://agent.kubi.kontactless.in
+    ```
+*   **Production/remote clusters**: Use `https://agent.<remote-domain>` only after configuring ingress TLS and making the endpoint reachable from the Kubi backend.
+*   **Validation**: `<agent_url>/healthz` and `<agent_url>/stats` must return HTTP `200`. The agent does not serve Kubernetes API paths such as `/api/v1/namespaces`.
 
 ### ❌ Rate Limit Throttling (429 Too Many Requests)
 *   **Symptoms**: Quick REST API updates return a `429` status error code.

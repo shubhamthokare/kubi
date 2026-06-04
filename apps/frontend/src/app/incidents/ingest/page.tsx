@@ -77,12 +77,16 @@ export default function IngestionHubPage() {
       try {
         setLoading(true);
         // Fetch current namespaces
-        const resources = await kubiApi.getResources();
-        if (resources?.namespaces) {
-          setNamespaces(resources.namespaces);
-          if (resources.namespaces.length > 0 && !resources.namespaces.includes(namespace)) {
-            setNamespace(resources.namespaces[0]);
+        try {
+          const resources = await kubiApi.getResources();
+          if (resources?.namespaces) {
+            setNamespaces(resources.namespaces);
+            if (resources.namespaces.length > 0 && !resources.namespaces.includes(namespace)) {
+              setNamespace(resources.namespaces[0]);
+            }
           }
+        } catch (err) {
+          console.error("Failed to load namespaces:", err);
         }
         
         // Fetch dynamic anomaly templates from the backend API

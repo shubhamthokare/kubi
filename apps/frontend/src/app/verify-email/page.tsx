@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { Activity, Mail, CheckCircle2 } from 'lucide-react';
 import { Box, Stack, Typography, Button, Container, TextField, Alert, CircularProgress, InputAdornment } from '@mui/material';
 import { SreAuthCard } from '@/components/ui/sre-layout';
+import { readApiResponse } from '@/lib/api';
 
 function VerifyEmailForm() {
   const searchParams = useSearchParams();
@@ -44,7 +45,7 @@ function VerifyEmailForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code }),
       });
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) {
         throw new Error(data.detail || 'Verification failed. Invalid or expired code.');
       }
@@ -78,7 +79,7 @@ function VerifyEmailForm() {
         body: JSON.stringify({ email }),
       });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await readApiResponse(res);
         throw new Error(data.detail || 'Failed to resend verification code.');
       }
       setResendMessage('Verification code resent successfully!');

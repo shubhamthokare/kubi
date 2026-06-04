@@ -24,7 +24,15 @@ const nextConfig: NextConfig = {
   async rewrites() {
     // BACKEND_URL is set to http://backend.kubi.kontactless.in in local-dev mode
     // so proxy rewrites go through nginx → backend (with CORS already applied)
-    const backendBase = process.env.BACKEND_URL ?? 'http://localhost:8000';
+    const configuredBackend = process.env.BACKEND_URL;
+    const localBackend =
+      !configuredBackend ||
+      configuredBackend.includes('localhost') ||
+      configuredBackend.includes('127.0.0.1');
+    const backendBase =
+      process.env.NODE_ENV === 'production' && localBackend
+        ? 'http://kubi-backend-service:8000'
+        : configuredBackend ?? 'http://localhost:8000';
     return [
       {
         source: '/api/:path*',

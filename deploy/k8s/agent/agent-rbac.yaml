@@ -19,6 +19,10 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log", "pods/status", "events", "nodes", "namespaces", "services", "endpoints"]
     verbs: ["get", "list", "watch"]
+  # Write: pod-level remediation for standalone pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "delete", "patch", "update"]
   # Execute: in-pod diagnostics (e.g. checking process state)
   - apiGroups: [""]
     resources: ["pods/exec"]

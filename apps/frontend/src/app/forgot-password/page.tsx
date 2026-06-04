@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Activity, Mail, Lock, KeyRound, ArrowLeft } from 'lucide-react';
 import { Box, Stack, Typography, Button, Container, TextField, Alert, CircularProgress, InputAdornment } from '@mui/material';
 import { SreAuthCard } from '@/components/ui/sre-layout';
+import { readApiResponse } from '@/lib/api';
 
 export default function ForgotPasswordPage() {
   const [stage, setStage] = React.useState<'email' | 'reset'>('email');
@@ -29,7 +30,7 @@ export default function ForgotPasswordPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) {
         throw new Error(data.detail || 'Failed to request reset OTP.');
       }
@@ -57,7 +58,7 @@ export default function ForgotPasswordPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code, new_password: newPassword }),
       });
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) {
         throw new Error(data.detail || 'Failed to reset password.');
       }

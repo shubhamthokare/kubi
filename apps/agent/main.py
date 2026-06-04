@@ -18,10 +18,16 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
+from resource_context import (
+    build_kubernetes_error_context,
+    build_pod_resource_context,
+    resolve_rollback_deployment,
+)
 
 # Initialize Arize AX tracing (must be before other operations)
 from arize_tracing import initialize_arize_tracing
 initialize_arize_tracing()
+from arize_tracing import get_tracer, set_span_attributes
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("kubi-agent")
@@ -83,6 +89,7 @@ def get_failed_pods(namespace: str):
                             message = status.state.terminated.message
                             break
                             
+                pod_context = build_pod_resource_context(pod, apps_v1, v1, logger)
                 failed_pods.append({
                     "name": pod.metadata.name,
                     "namespace": pod.metadata.namespace,
@@ -91,7 +98,7 @@ def get_failed_pods(namespace: str):
                     "message": message,
                     "uid": pod.metadata.uid,
                     "creation_timestamp": pod.metadata.creation_timestamp.isoformat() if pod.metadata.creation_timestamp else None,
-                    "has_owner": bool(pod.metadata.owner_references)
+                    **pod_context,
                 })
     except ApiException as e:
         logging.exception(f"Error fetching pods: {e}")
@@ -280,13 +287,100 @@ def restart_deployment(namespace: str, deployment: str):
     except ApiException as e:
         return {"success": False, "message": str(e)}
 
+@app.post("/actions/rollback/{namespace}/{deployment}")
+def rollback_deployment(namespace: str, deployment: str):
+    import subprocess
+    tracer = get_tracer("kubi-agent.actions")
+    span_metadata = {
+        "action_type": "rollback_deployment",
+        "namespace": namespace,
+        "target_name": deployment,
+        "resource_kind": "Deployment",
+    }
+    try:
+        with tracer.start_as_current_span("action.kubernetes_api.rollback") as span:
+            set_span_attributes(span, span_metadata)
+            resolved_deployment, resolution_error = resolve_rollback_deployment(namespace, deployment, v1, apps_v1)
+            span.set_attribute("resolved_deployment", resolved_deployment or "")
+            if resolution_error:
+                payload = {
+                    "success": False,
+                    "message": resolution_error,
+                    "resource_context": build_kubernetes_error_context(
+                        status=None,
+                        message=resolution_error,
+                        resource_kind="Pod",
+                        resource_name=deployment,
+                        namespace=namespace,
+                    ),
+                }
+                span.set_attribute("success", False)
+                span.set_attribute("failure_reason", resolution_error)
+                return payload
+            result = subprocess.run(
+                ["kubectl", "rollout", "undo", "deployment", resolved_deployment, "-n", namespace],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                message = result.stdout.strip() or f"Deployment {resolved_deployment} rolled back."
+                if resolved_deployment != deployment:
+                    message = f"Resolved pod {deployment} to deployment {resolved_deployment}. {message}"
+                span.set_attribute("success", True)
+                return {"success": True, "message": message}
+            message = result.stderr.strip() or result.stdout.strip() or "kubectl rollout undo failed."
+            span.set_attribute("success", False)
+            span.set_attribute("failure_reason", message)
+            return {
+                "success": False,
+                "message": message,
+                "resource_context": build_kubernetes_error_context(
+                    status=None,
+                    message=message,
+                    resource_kind="Deployment",
+                    resource_name=resolved_deployment,
+                    namespace=namespace,
+                ),
+            }
+    except subprocess.TimeoutExpired:
+        return {"success": False, "message": f"Rollback timed out for deployment {deployment}."}
+    except Exception as e:
+        logger.exception(f"Rollback error for deployment {namespace}/{deployment}: {e}")
+        return {
+            "success": False,
+            "message": str(e),
+            "resource_context": build_kubernetes_error_context(
+                status=getattr(e, "status", None),
+                message=str(e),
+                resource_kind="Deployment",
+                resource_name=deployment,
+                namespace=namespace,
+            ),
+        }
+
 @app.delete("/actions/pod/{namespace}/{pod_name}")
 def delete_pod(namespace: str, pod_name: str):
+    tracer = get_tracer("kubi-agent.actions")
     try:
-        v1.delete_namespaced_pod(name=pod_name, namespace=namespace)
-        return {"success": True, "message": f"Pod {pod_name} deleted successfully."}
+        with tracer.start_as_current_span("action.kubernetes_api.delete_pod") as span:
+            set_span_attributes(span, {"action_type": "restart_pod", "namespace": namespace, "target_name": pod_name, "resource_kind": "Pod"})
+            v1.delete_namespaced_pod(name=pod_name, namespace=namespace)
+            span.set_attribute("success", True)
+            return {"success": True, "message": f"Pod {pod_name} deleted successfully."}
     except ApiException as e:
-        return {"success": False, "message": str(e)}
+        context = build_kubernetes_error_context(
+            status=getattr(e, "status", None),
+            message=str(e),
+            resource_kind="Pod",
+            resource_name=pod_name,
+            namespace=namespace,
+        )
+        return {
+            "success": False,
+            "message": str(e),
+            "resource_context": context,
+        }
 
 class ManifestPayload(BaseModel):
     manifest: str
@@ -307,7 +401,15 @@ def apply_manifest(payload: ManifestPayload):
         if result.returncode == 0:
             return {"success": True, "message": result.stdout}
         else:
-            return {"success": False, "message": result.stderr}
+            return {
+                "success": False,
+                "message": result.stderr,
+                "resource_context": build_kubernetes_error_context(
+                    status=None,
+                    message=result.stderr,
+                    resource_kind="Manifest",
+                ),
+            }
     except Exception as e:
         return {"success": False, "message": str(e)}
 

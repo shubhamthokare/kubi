@@ -15,16 +15,25 @@ class RemediationWorkflow:
         self.action_engine = ActionEngine()
         self.reporting_service = ReportingService()
 
-    async def store_plan(self, plan: RemediationPlan, tokens_consumed: int = 0) -> str:
+    async def store_plan(
+        self,
+        plan: RemediationPlan,
+        tokens_consumed: int = 0,
+        parent_plan_id: str = None,
+        generated_by: str = "ai",
+        resource_context: dict | None = None,
+    ) -> str:
         """Stores a plan in MongoDB and returns its unique ID."""
         db = get_db()
         plan_id = str(uuid.uuid4())
         
         plan_dict = {
             "plan_id": plan_id,
+            "parent_plan_id": parent_plan_id,
             "status": "pending_approval",
             "plan": plan.model_dump(),
-            "generated_by": "ai",
+            "resource_context": resource_context or getattr(plan, "resource_context", None),
+            "generated_by": generated_by,
             "tokens_consumed": tokens_consumed
         }
         
@@ -105,7 +114,24 @@ class RemediationWorkflow:
         # Execute actions (async)
         # Note: We parse the plan dict back into RemediationPlan
         plan_obj = RemediationPlan(**plan_entry["plan"])
-        results = await action_engine.execute_plan(plan_obj.actions)
+        try:
+            from app.core.arize_tracing import get_tracer, set_span_attributes
+            tracer = get_tracer("kubi.remediation")
+        except Exception:
+            tracer = None
+
+        if tracer:
+            with tracer.start_as_current_span("action.agent_execute") as span:
+                set_span_attributes(span, {
+                    "plan_id": plan_id,
+                    "approval_state": "approved",
+                    "resource_context": plan_entry.get("resource_context"),
+                    "action_count": len(plan_obj.actions),
+                })
+                results = await action_engine.execute_plan(plan_obj.actions)
+                span.set_attribute("execution_success", all(r.get("success", False) for r in results))
+        else:
+            results = await action_engine.execute_plan(plan_obj.actions)
         
         # Check if all executions were technically successful
         all_success = all(r.get("success", False) for r in results)
@@ -145,29 +171,38 @@ class RemediationWorkflow:
         logger.info(f"Waiting for health verification for plan {sanitize_log(plan_id)}...")
         await db.plans.update_one({"plan_id": plan_id}, {"$set": {"status": "verifying"}})
         
+        # Initial delay to allow K8s operations to complete (deployments take 30-90s to stabilize)
+        logger.info("Allowing 10 seconds for Kubernetes operations to stabilize...")
+        await asyncio.sleep(10)
+        
         verified = True
         for action in plan_obj.actions:
             if action.action_type in ["restart_deployment", "rollback_deployment"]:
-                # Poll deployment health
+                # Poll deployment health with extended window (60 seconds total)
+                # Use exponential backoff: 15 attempts × 4 seconds each
                 is_healthy = False
-                for attempt in range(5): # 5 attempts
-                    await asyncio.sleep(2) # 2 seconds per attempt
+                for attempt in range(15):
+                    await asyncio.sleep(4)
+                    logger.info(f"Health check attempt {attempt + 1}/15 for {sanitize_log(action.target_name)}...")
                     if action_engine.k8s_service.verify_deployment_health(action.target_name, action.namespace):
                         is_healthy = True
+                        logger.info(f"Deployment {sanitize_log(action.target_name)} is healthy")
                         break
                 if not is_healthy:
-                    logger.warning(f"Health verification failed for {sanitize_log(action.target_name)}")
+                    logger.warning(f"Health verification failed for {sanitize_log(action.target_name)} after 60 seconds")
                     verified = False
             elif action.action_type == "restart_pod":
-                # Poll pod health
+                # Poll pod health with extended window (60 seconds total)
                 is_healthy = False
-                for attempt in range(5):
-                    await asyncio.sleep(2)
+                for attempt in range(15):
+                    await asyncio.sleep(4)
+                    logger.info(f"Health check attempt {attempt + 1}/15 for pod {sanitize_log(action.target_name)}...")
                     if action_engine.k8s_service.verify_pod_health(action.target_name, action.namespace):
                         is_healthy = True
+                        logger.info(f"Pod {sanitize_log(action.target_name)} is healthy")
                         break
                 if not is_healthy:
-                    logger.warning(f"Health verification failed for pod {sanitize_log(action.target_name)}")
+                    logger.warning(f"Health verification failed for pod {sanitize_log(action.target_name)} after 60 seconds")
                     verified = False
         
         final_status = "completed" if verified else "failed_verification"
@@ -351,3 +386,29 @@ class RemediationWorkflow:
                 
         logger.info(f"🛡️ Safe-mode guard completed. Resource {target_name} remained stable.")
 
+    async def get_plan_lineage(self, plan_id: str) -> list:
+        """Returns the full parent→child chain for a plan."""
+        db = get_db()
+        lineage = []
+        current_id = plan_id
+        
+        # Walk up to find the root
+        while current_id:
+            plan = await db.plans.find_one({"plan_id": current_id})
+            if not plan:
+                break
+            plan["_id"] = str(plan["_id"])
+            lineage.insert(0, plan)
+            current_id = plan.get("parent_plan_id")
+        
+        # Walk down from root to find all children
+        current_id = plan_id
+        while True:
+            child = await db.plans.find_one({"parent_plan_id": current_id})
+            if not child:
+                break
+            child["_id"] = str(child["_id"])
+            lineage.append(child)
+            current_id = child["plan_id"]
+        
+        return lineage

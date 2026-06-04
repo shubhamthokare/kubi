@@ -25,4 +25,15 @@ data:
   ELASTICSEARCH_SHARDS: "1"
   ELASTICSEARCH_REPLICAS: "0"
   # CORS — allow all local + tunnel origins
+  # Email / OTP
+  EMAIL_PROVIDER: "auto"
+  EMAIL_FROM: "no-reply@kubi.ai"
+  SMTP_HOST: "smtp.resend.com"
+  SMTP_PORT: "465"
+  SMTP_USERNAME: "resend"
+  SMTP_USE_SSL: "true"
+  SMTP_USE_TLS: "false"
+  EMAIL_SENDER_MONTHLY_LIMIT: "3000"
+  EMAIL_SENDER_SWITCH_AFTER: "2900"
+  EMAIL_SENDER_USAGE_COLLECTION: "email_sender_usage"
   CORS_ORIGINS: "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:49262,http://192.168.49.2:30001,http://kubi.kontactless.in,http://backend.kubi.kontactless.in,http://agent.kubi.kontactless.in"

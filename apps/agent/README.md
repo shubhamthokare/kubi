@@ -174,14 +174,45 @@ python main.py
 
 ### Remote Cluster Access
 
+The recommended remote-cluster model is to run one Kubi agent inside each target cluster:
+
 ```bash
-# 1. Configure kubeconfig for remote cluster
+# 1. Verify the target context
+kubectl --context <remote-context> cluster-info
+
+# 2. Create the namespace and deploy the agent resources
+kubectl --context <remote-context> apply -f deploy/k8s/base/namespace.yaml
+kubectl --context <remote-context> apply -k deploy/k8s/agent
+```
+
+Register the agent in Kubi using a URL that the Kubi backend can reach:
+
+```text
+# Backend and agent in the same cluster
+auth_type=agent
+agent_url=http://kubi-agent-service.kubi.svc.cluster.local:8080
+
+# Agent exposed through a secure remote ingress
+auth_type=agent
+agent_url=https://agent.<remote-domain>
+```
+
+Verify the connection from the Kubi backend network:
+
+```text
+GET <agent_url>/healthz
+GET <agent_url>/stats
+```
+
+An external agent ingress must use TLS and should be protected using authentication, private networking, and firewall restrictions. Do not configure the agent URL as a direct Kubernetes API endpoint. Requests such as `/api/v1/namespaces` belong to the Kubernetes API server and return `404` when sent to the Kubi agent.
+
+For local Minikube ingress testing, use `http://agent.kubi.kontactless.in`. The local ingress does not provide TLS, so `https://agent.kubi.kontactless.in` attempts port `443` and fails. This local URL is not suitable for connecting a remote Kubi backend.
+
+If running the agent process outside the target cluster instead, configure a kubeconfig that can reach the remote Kubernetes API:
+
+```bash
 export KUBECONFIG=~/.kube/production-config.yaml
-
-# 2. Verify connection
 kubectl cluster-info
-
-# 3. Run agent
 python main.py
 ```
 

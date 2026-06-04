@@ -28,6 +28,7 @@
     border-color: var(--color-border);
     border-width: 0;
     border-style: solid;
+    box-sizing: border-box;
   }
   body {
     background-color: #030712;
@@ -36,6 +37,10 @@
     -moz-osx-font-smoothing: grayscale;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6, p {
+    overflow-wrap: anywhere;
   }
 }
 
@@ -47,10 +52,9 @@
   right: 0;
   bottom: 0;
   z-index: -10;
-  background: 
-    radial-gradient(120% 120% at 50% 0%, rgba(99, 102, 241, 0.05) 0%, rgba(0, 0, 0, 0) 60%),
-    radial-gradient(100% 100% at 100% 100%, rgba(139, 92, 246, 0.03) 0%, rgba(0, 0, 0, 0) 50%),
-    #030712;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.72) 0%, rgba(2, 6, 23, 0.98) 38%, #020617 100%),
+    #020617;
 }
 
 .cosmic-bg::before {
@@ -69,26 +73,18 @@
   pointer-events: none;
 }
 
-/* Cybernetic Glassmorphism & Translucence */
+/* Operational SRE surfaces */
 .glass {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 
-    inset 0 1px 1px rgba(255, 255, 255, 0.05),
-    0 8px 32px -4px rgba(0, 0, 0, 0.5);
-  border-radius: 16px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(15, 23, 42, 0.68);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow: none;
+  border-radius: 8px;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
 }
 
 .glass-hover:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
-  border-color: rgba(255, 255, 255, 0.12);
-  transform: translateY(-4px);
-  box-shadow: 
-    inset 0 1px 2px rgba(255, 255, 255, 0.08),
-    0 20px 40px -8px rgba(0, 0, 0, 0.6);
+  background: rgba(30, 41, 59, 0.72);
+  border-color: rgba(96, 165, 250, 0.26);
 }
 
 .text-gradient {
@@ -100,17 +96,17 @@
 
 /* Custom SRE Dashboard layouts */
 .sre-card {
-  background: rgba(255, 255, 255, 0.01);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 12px;
-  box-shadow: inset 0 1px 0px rgba(255, 255, 255, 0.02);
+  background: rgba(15, 23, 42, 0.64);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 8px;
+  box-shadow: none;
 }
 
 .sre-terminal-console {
   background: #020617;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  padding: 16px;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 0.85rem;
   color: #cbd5e1;
@@ -119,19 +115,39 @@
 
 /* Soft Neon Glowing Accents */
 .glow-primary {
-  box-shadow: 0 0 20px rgba(96, 165, 250, 0.15);
+  box-shadow: none;
 }
 
 .glow-success {
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+  box-shadow: none;
 }
 
 .glow-warning {
-  box-shadow: 0 0 20px rgba(245, 158, 11, 0.15);
+  box-shadow: none;
 }
 
 .glow-error {
-  box-shadow: 0 0 20px rgba(239, 68, 68, 0.15);
+  box-shadow: none;
+}
+
+.ops-page-header {
+  margin-bottom: 24px;
+}
+
+.ops-section {
+  background: rgba(15, 23, 42, 0.62);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 8px;
+}
+
+.ops-panel-title {
+  color: #f8fafc;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.ops-muted {
+  color: rgba(203, 213, 225, 0.68);
 }
 
 /* Double pulsing rings animations */
@@ -302,5 +318,59 @@ input:-webkit-autofill:active {
   border-radius: 50%;
   background-color: #ef4444;
   box-shadow: 0 0 8px #ef4444;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   Connection Error Banner & Reconnect Button
+   ────────────────────────────────────────────────────────────────────────────── */
+.sre-error-banner {
+  margin-top: 16px;
+  padding: 20px;
+  border-radius: 8px;
+  background-color: rgba(239, 68, 68, 0.04);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.sre-error-banner::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background-color: #ef4444;
+}
+
+.sre-error-banner .sre-error-icon {
+  color: #fca5a5;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.sre-error-banner .sre-error-text {
+  color: #fca5a5;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.sre-btn-reconnect {
+  text-transform: none !important;
+  border-radius: 8px !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  color: #fca5a5 !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0;
+  transition: all 0.2s ease !important;
+}
+
+.sre-btn-reconnect:hover {
+  border-color: #ef4444 !important;
+  background-color: rgba(239, 68, 68, 0.08) !important;
+  transform: translateY(-1px) !important;
 }
 

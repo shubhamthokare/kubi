@@ -71,6 +71,60 @@ class TestSimulatedRemediationPlan:
         # Should extract deployment name by stripping last 2 hyphen segments
         assert "api-server" in plan.actions[0].target_name
 
+    def test_image_pull_bare_pod_context_blocks_rollback(self, svc):
+        plan = svc._simulated_remediation_plan(
+            "broke-pod",
+            "image pull failure",
+            "logs",
+            resource_context={
+                "namespace": "default",
+                "has_owner": False,
+                "is_bare_pod": True,
+                "controller_kind": None,
+                "rollback_target": None,
+            },
+        )
+        assert plan.actions[0].action_type == "restart_pod"
+        assert plan.actions[0].target_name == "broke-pod"
+        assert "rollback is unavailable" in plan.actions[0].reason.lower()
+        assert plan.resource_context["is_bare_pod"] is True
+
+    def test_image_pull_deployment_context_targets_controller(self, svc):
+        plan = svc._simulated_remediation_plan(
+            "api-server-7f9b4c98-xk2j9",
+            "image pull failure",
+            "logs",
+            resource_context={
+                "namespace": "prod",
+                "has_owner": True,
+                "is_bare_pod": False,
+                "controller_kind": "Deployment",
+                "controller_name": "api-server",
+                "rollback_target": "api-server",
+            },
+        )
+        assert plan.actions[0].action_type == "rollback_deployment"
+        assert plan.actions[0].target_name == "api-server"
+        assert plan.actions[0].namespace == "prod"
+        assert plan.resource_context["rollback_target"] == "api-server"
+
+    def test_format_resource_context_includes_action_constraints(self, svc):
+        text = svc._format_resource_context({
+            "namespace": "default",
+            "resource_kind": "Pod",
+            "resource_name": "broke-pod",
+            "scenario": "CrashLoopBackOff",
+            "has_owner": False,
+            "is_bare_pod": True,
+            "valid_actions": ["inspect_logs", "restart_pod"],
+            "invalid_actions": ["rollback_deployment"],
+            "redemption_guidance": "Use pod-level recovery.",
+        })
+        assert "Valid actions" in text
+        assert "Blocked actions" in text
+        assert "rollback_deployment" in text
+        assert "Only recommend actions listed in Valid actions" in text
+
     def test_generic_crash_standalone_pod(self, svc):
         plan = svc._simulated_remediation_plan("failing-pod", "application crash", "logs")
         assert plan.actions[0].action_type == "restart_pod"
@@ -160,19 +214,27 @@ class TestGetModel:
 class TestFallbackPaths:
     @pytest.mark.asyncio
     async def test_analyze_incident_fallback(self, svc):
-        """When _generate_with_fallback raises, analyze_incident returns simulated RCA."""
+        """When _generate_with_fallback raises, analyze_incident returns simulated RCA with 'rule-based' generated_by."""
         svc._generate_with_fallback = AsyncMock(side_effect=RuntimeError("all offline"))
-        result = await svc.analyze_incident("pod-x", "CrashLoopBackOff", "exit code 1")
+        result, generated_by = await svc.analyze_incident("pod-x", "CrashLoopBackOff", "exit code 1")
         assert "FALLBACK SRE ENGINE" in result
+        assert generated_by == "rule-based"
 
     @pytest.mark.asyncio
     async def test_generate_remediation_plan_fallback(self, svc):
-        """When all AI pathways fail, returns a simulated remediation plan."""
+        """When all AI pathways fail, returns a simulated remediation plan with 'rule-based' generated_by."""
         svc._generate_with_fallback = AsyncMock(side_effect=RuntimeError("offline"))
         svc.get_historical_context = AsyncMock(return_value="No context")
-        plan = await svc.generate_remediation_plan("pod-x", "crash", "logs")
+        plan, generated_by = await svc.generate_remediation_plan(
+            "pod-x",
+            "crash",
+            "logs",
+            resource_context={"namespace": "default", "is_bare_pod": True, "has_owner": False},
+        )
         assert isinstance(plan, RemediationPlan)
         assert len(plan.actions) > 0
+        assert plan.actions[0].action_type == "restart_pod"
+        assert generated_by == "rule-based"
 
     @pytest.mark.asyncio
     async def test_generate_postmortem_fallback(self, svc):

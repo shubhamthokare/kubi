@@ -100,5 +100,16 @@ We have successfully engineered the core infrastructure and telemetry layers of 
 
 ---
 
-*Last Updated: June 1, 2026*
+## 🐛 Phase 7: Bug Fixes & Stability
+
+### Critical Bug Fixes
+- [x] **Pending Approvals Loop (16 Duplicates)**: Removed pod UID from incident ID to prevent duplicate incidents on pod restarts. Added parent-child plan lineage tracking with `superseded` status. Old `pending_approval` plans are automatically superseded when a new analysis runs.
+- [x] **Remediation Failed (Execution/Verification)**: Extended health verification window from 10s to 70s with initial stabilization delay. Fixed `verify_deployment_health()` to check actual replica readiness instead of just existence. Added retry logic with backoff to agent connectivity. `execute_plan()` now continues on non-critical action failures.
+- [x] **AI Generated Label When Gemini Offline**: `GeminiService` now returns `generated_by` metadata (`"ai"` vs `"rule-based"`). The label propagates through `incident_detection` → `store_plan()` → frontend. Distinct badges shown for AI, Rule-Based, and Manual plans.
+- [x] **Kubeconfig Connection Failed (Stale Proxy)**: Added `_parse_k8s_connection_error()` to parse raw `MaxRetryError`/`ConnectionRefused` tracebacks into actionable user-friendly messages. Added client caching and `test_connection()` method to agent. Frontend now shows error detail banner with Reconnect button.
+
+---
+
+*Last Updated: June 2, 2026*
 *Project Stage: Production Release Ready 🚀*
+

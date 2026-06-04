@@ -615,6 +615,28 @@ export default function MultiClusterConfigurePage() {
                             </Stack>
                           </Grid>
                         </Grid>
+
+                        {/* Connection Error Details Banner */}
+                        {validation.status === 'error' && validation.message && validation.message !== 'Unreachable' && (
+                          <div className="sre-error-banner">
+                            <Stack direction="row" spacing={2} alignItems="flex-start">
+                              <AlertTriangle size={16} className="sre-error-icon" />
+                              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                                <span className="sre-error-text">{validation.message}</span>
+                              </Box>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                className="sre-btn-reconnect"
+                                startIcon={<RefreshCw size={14} />}
+                                onClick={() => testClusterConnection(cluster.id, cluster)}
+                                disabled={cooldown > 0}
+                              >
+                                Reconnect
+                              </Button>
+                            </Stack>
+                          </div>
+                        )}
                       </Paper>
                     );
                   })}

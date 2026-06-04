@@ -44,7 +44,20 @@ import {
   TextField,
 } from '@mui/material';
 import { ExpandLess, ExpandMore } from '@mui/icons-material';
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import dynamic from 'next/dynamic';
+
+const ResponsiveContainer = dynamic(() => import('recharts').then((mod) => mod.ResponsiveContainer), { ssr: false });
+const AreaChart = dynamic(() => import('recharts').then((mod) => mod.AreaChart), { ssr: false });
+const Area = dynamic(() => import('recharts').then((mod) => mod.Area), { ssr: false });
+const BarChart = dynamic(() => import('recharts').then((mod) => mod.BarChart), { ssr: false });
+const Bar = dynamic(() => import('recharts').then((mod) => mod.Bar), { ssr: false });
+const LineChart = dynamic(() => import('recharts').then((mod) => mod.LineChart), { ssr: false });
+const Line = dynamic(() => import('recharts').then((mod) => mod.Line), { ssr: false });
+const XAxis = dynamic(() => import('recharts').then((mod) => mod.XAxis), { ssr: false });
+const YAxis = dynamic(() => import('recharts').then((mod) => mod.YAxis), { ssr: false });
+const CartesianGrid = dynamic(() => import('recharts').then((mod) => mod.CartesianGrid), { ssr: false });
+const Tooltip = dynamic(() => import('recharts').then((mod) => mod.Tooltip), { ssr: false });
+const Legend = dynamic(() => import('recharts').then((mod) => mod.Legend), { ssr: false });
 import { kubiApi, getWsUrl } from '@/lib/api';
 import { SreCard, SreConsole } from '@/components/ui/sre-layout';
 
@@ -245,22 +258,36 @@ export default function AnalyzerPage() {
     }
   };
 
-  // Group pods by deployment or namespace
-  const getNamespaceDeployments = (ns: string) => {
-    return resources.deployments.filter((d) => d.namespace === ns);
-  };
-
-  const getDeploymentPods = (depName: string, ns: string) => {
-    return resources.pods.filter((p) => p.namespace === ns && p.name.startsWith(depName));
-  };
-
-  const getStandalonePods = (ns: string) => {
-    const depNames = resources.deployments.filter((d) => d.namespace === ns).map((d) => d.name);
-    return resources.pods.filter((p) => {
-      if (p.namespace !== ns) return false;
-      return !depNames.some((dName) => p.name.startsWith(dName));
+  // Group pods by namespace and deployment using useMemo for high rendering performance
+  const groupedDeployments = React.useMemo(() => {
+    const maps: Record<string, any[]> = {};
+    resources.namespaces.forEach((ns) => {
+      maps[ns] = resources.deployments.filter((d) => d.namespace === ns);
     });
-  };
+    return maps;
+  }, [resources.namespaces, resources.deployments]);
+
+  const groupedPodsByDeployment = React.useMemo(() => {
+    const maps: Record<string, any[]> = {};
+    resources.deployments.forEach((dep) => {
+      maps[`${dep.namespace}/${dep.name}`] = resources.pods.filter(
+        (p) => p.namespace === dep.namespace && p.name.startsWith(dep.name)
+      );
+    });
+    return maps;
+  }, [resources.deployments, resources.pods]);
+
+  const groupedStandalonePods = React.useMemo(() => {
+    const maps: Record<string, any[]> = {};
+    resources.namespaces.forEach((ns) => {
+      const depNames = (groupedDeployments[ns] || []).map((d) => d.name);
+      maps[ns] = resources.pods.filter((p) => {
+        if (p.namespace !== ns) return false;
+        return !depNames.some((dName) => p.name.startsWith(dName));
+      });
+    });
+    return maps;
+  }, [resources.namespaces, resources.pods, groupedDeployments]);
 
   useEffect(() => {
     async function loadStats() {
@@ -373,12 +400,12 @@ export default function AnalyzerPage() {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
+    <Container maxWidth={false} disableGutters sx={{ py: 0 }}>
       {/* Header */}
-      <Box sx={{ mb: 4 }}>
+      <Box className="ops-page-header">
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
           <Box>
-            <Typography variant="h4" fontWeight="bold" color="white" gutterBottom>
+            <Typography variant="h4" fontWeight={850} color="white" gutterBottom sx={{ fontSize: { xs: '1.6rem', md: '2rem' } }}>
               System Analyzer
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -403,10 +430,10 @@ export default function AnalyzerPage() {
         </Stack>
       </Box>
 
-      <Grid container spacing={3}>
+      <Grid container spacing={2.5}>
         {/* Key Metrics */}
         <Grid item xs={12} md={3}>
-          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 3 }}>
+          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 1, border: '1px solid rgba(148,163,184,0.12)' }}>
             <CardContent>
               <Stack direction="row" alignItems="center" spacing={2}>
                 <Box
@@ -439,7 +466,7 @@ export default function AnalyzerPage() {
         </Grid>
 
         <Grid item xs={12} md={3}>
-          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 3 }}>
+          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 1, border: '1px solid rgba(148,163,184,0.12)' }}>
             <CardContent>
               <Stack direction="row" alignItems="center" spacing={2}>
                 <Box
@@ -472,7 +499,7 @@ export default function AnalyzerPage() {
         </Grid>
 
         <Grid item xs={12} md={3}>
-          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 3 }}>
+          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 1, border: '1px solid rgba(148,163,184,0.12)' }}>
             <CardContent>
               <Stack direction="row" alignItems="center" spacing={2}>
                 <Box
@@ -505,7 +532,7 @@ export default function AnalyzerPage() {
         </Grid>
 
         <Grid item xs={12} md={3}>
-          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 3 }}>
+          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 1, border: '1px solid rgba(148,163,184,0.12)' }}>
             <CardContent>
               <Stack direction="row" alignItems="center" spacing={2}>
                 <Box
@@ -539,7 +566,7 @@ export default function AnalyzerPage() {
 
         {/* System Performance Chart */}
         <Grid item xs={12} lg={8}>
-          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 3 }}>
+          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 1, border: '1px solid rgba(148,163,184,0.12)' }}>
             <CardContent sx={{ p: 3 }}>
               <Typography variant="h6" fontWeight="bold" color="white" gutterBottom>
                 {timeRange === '24h' ? "System Performance (Last 24 Hours)" : timeRange === '1h' ? "System Performance (Last Hour)" : "System Performance (Live Stream)"}
@@ -588,7 +615,7 @@ export default function AnalyzerPage() {
 
         {/* Service Health */}
         <Grid item xs={12} lg={4}>
-          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 3 }}>
+          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 1, border: '1px solid rgba(148,163,184,0.12)' }}>
             <CardContent sx={{ p: 3 }}>
               <Typography variant="h6" fontWeight="bold" color="white" gutterBottom>
                 Service Health Indices
@@ -626,7 +653,7 @@ export default function AnalyzerPage() {
 
         {/* Incident Trends Bar Chart */}
         <Grid item xs={12} lg={7}>
-          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 3 }}>
+          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 1, border: '1px solid rgba(148,163,184,0.12)' }}>
             <CardContent sx={{ p: 3 }}>
               <Typography variant="h6" fontWeight="bold" color="white" gutterBottom>
                 Incident Trends (Last 5 Months)
@@ -653,7 +680,7 @@ export default function AnalyzerPage() {
 
         {/* Cluster Sidebar Overview */}
         <Grid item xs={12} lg={5}>
-          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 3, height: '100%' }}>
+          <Card elevation={0} sx={{ bgcolor: 'background.paper', borderRadius: 1, height: '100%', border: '1px solid rgba(148,163,184,0.12)' }}>
             <CardContent sx={{ p: 3 }}>
               <Typography variant="h6" fontWeight="bold" color="white" gutterBottom>
                 Cluster Overview
@@ -757,21 +784,21 @@ export default function AnalyzerPage() {
           </Typography>
         </Box>
       ) : (
-        <Grid container spacing={4}>
+        <Grid container spacing={2.5}>
           {/* LEFT: WORKLOADS TREE */}
           <Grid item xs={12} md={3}>
-            <SreCard sx={{ height: '70vh', overflowY: 'auto' }}>
+            <SreCard sx={{ height: { xs: 360, md: 'calc(100vh - 250px)' }, minHeight: 520, overflowY: 'auto' }}>
               <CardContent sx={{ p: 2 }}>
                 <Typography variant="subtitle2" fontWeight="bold" color="white" sx={{ mb: 2, px: 1, textTransform: 'uppercase', letterSpacing: 1 }}>
-                  📁 Workloads Tree
+                  Workloads Tree
                 </Typography>
                 <Divider sx={{ mb: 2, borderColor: 'rgba(255,255,255,0.05)' }} />
 
                 <List component="nav" disablePadding>
                   {resources.namespaces.map((ns) => {
                     const isNsExpanded = expandedNamespace === ns;
-                    const nsDeps = getNamespaceDeployments(ns);
-                    const standalonePods = getStandalonePods(ns);
+                    const nsDeps = groupedDeployments[ns] || [];
+                    const standalonePods = groupedStandalonePods[ns] || [];
 
                     return (
                       <Box key={ns} sx={{ mb: 1 }}>
@@ -791,7 +818,7 @@ export default function AnalyzerPage() {
                             {/* Deployments inside namespace */}
                             {nsDeps.map((dep) => {
                               const isDepExpanded = expandedWorkload === dep.name;
-                              const depPods = getDeploymentPods(dep.name, ns);
+                              const depPods = groupedPodsByDeployment[`${ns}/${dep.name}`] || [];
 
                               return (
                                 <Box key={dep.name} sx={{ mt: 0.5 }}>
@@ -888,7 +915,7 @@ export default function AnalyzerPage() {
           {/* RIGHT: DIAGNOSTICS & LOG STREAMING PANEL */}
           <Grid item xs={12} md={9}>
             {selectedPod ? (
-              <SreCard sx={{ height: '70vh', display: 'flex', flexDirection: 'column' }}>
+              <SreCard sx={{ height: { xs: 560, md: 'calc(100vh - 250px)' }, minHeight: 520, display: 'flex', flexDirection: 'column' }}>
                 <Box sx={{ borderBottom: 1, borderColor: 'rgba(255,255,255,0.05)', px: 3, pt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
                   <Box>
                     <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 0.5 }}>
@@ -898,7 +925,7 @@ export default function AnalyzerPage() {
                       <Chip label={selectedNamespace} size="small" variant="outlined" color="primary" sx={{ height: 20, fontSize: '0.7rem', fontWeight: 'bold' }} />
                     </Stack>
                     <Typography variant="caption" color="text.secondary">
-                      Pod Telemetry Status • Switched Context
+                      Pod telemetry status - switched context
                     </Typography>
                   </Box>
                   <Tabs value={activeTab} onChange={handleTabChange} sx={{ '& .MuiTab-root': { py: 2, textTransform: 'none', fontWeight: 'bold' } }}>
@@ -1050,7 +1077,7 @@ export default function AnalyzerPage() {
                       ) : (
                         <Stack spacing={2}>
                           {esSearchResults.map((hit, idx) => (
-                            <Box key={idx} sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 1.5 }}>
+                            <Box key={idx} className="sre-card" sx={{ p: 2, borderRadius: 1.5 }}>
                               <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
                                 <Typography variant="caption" color="primary" sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
                                   Match #{idx + 1} • Score: {hit.score?.toFixed(2) || '1.0'}
@@ -1071,12 +1098,10 @@ export default function AnalyzerPage() {
                 )}
               </SreCard>
             ) : (
-              <Paper
+              <SreCard
                 sx={{
-                  height: '70vh',
-                  bgcolor: 'background.paper',
-                  border: '1px solid rgba(255,255,255,0.05)',
-                  borderRadius: 3,
+                  height: { xs: 420, md: 'calc(100vh - 250px)' },
+                  minHeight: 520,
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'center',
@@ -1091,7 +1116,7 @@ export default function AnalyzerPage() {
                 <Typography variant="caption" color="text.secondary">
                   Expand a namespace and click on an SRE pod to stream logs or view YAML
                 </Typography>
-              </Paper>
+              </SreCard>
             )}
           </Grid>
         </Grid>

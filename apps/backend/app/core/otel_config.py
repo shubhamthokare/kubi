@@ -1,5 +1,6 @@
 import os
-from opentelemetry import trace, metrics
+from apps.opentelemetry import metrics
+from apps.opentelemetry import trace
 from opentelemetry.sdk.resources import Resource, OTELResourceDetector
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -7,9 +8,9 @@ from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from apps.opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from opentelemetry.instrumentation.requests import RequestsInstrumentor
+from apps.opentelemetry.instrumentation.requests import RequestsInstrumentor
 
 def initialize_otel():
     """Configure OpenTelemetry SDK for tracing and metrics.

@@ -142,30 +142,43 @@ metadata:
   name: kubi-agent-config
   namespace: kubi
 ---
-apiVersion: v1
-data:
-  AGENT_URL: http://kubi-agent-service:8080
-  BACKEND_URL: http://kubi-backend-service:8000
-  CORS_ORIGINS: http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:49262,http://192.168.49.2:30001
-  DATABASE_NAME: kubi
-  DOMAIN: 8.231.96.95
-  DOMAIN_NAME: 8.231.96.95
-  ELASTICSEARCH_HOST: http://elasticsearch-service:9200
-  ELASTICSEARCH_INDEX: kubi-incidents
-  ELASTICSEARCH_INDEX_EVENTS: kubi-events
-  ELASTICSEARCH_INDEX_LOGS: kubi-pod-logs
-  ELASTICSEARCH_INDEX_RCA: kubi-rca
-  ELASTICSEARCH_INDEX_REMEDIATION: kubi-remediation
-  ELASTICSEARCH_PASSWORD: ""
-  ELASTICSEARCH_REPLICAS: "0"
-  ELASTICSEARCH_SHARDS: "1"
-  ELASTICSEARCH_USERNAME: ""
-  FRONTEND_URL: http://kubi-frontend-service:80
-  MONGODB_URL: mongodb://mongodb-service:27017
-kind: ConfigMap
-metadata:
-  name: kubi-config
-  namespace: kubi
+# apiVersion: v1
+# data:
+#   AGENT_URL: http://kubi-agent-service:8080
+#   BACKEND_URL: http://kubi-backend-service:8000
+#   CORS_ORIGINS: http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:49262,http://192.168.49.2:30001
+#   DATABASE_NAME: kubi
+#   DOMAIN: 8.231.96.95
+#   DOMAIN_NAME: 8.231.96.95
+#   ELASTICSEARCH_HOST: http://elasticsearch-service:9200
+#   ELASTICSEARCH_INDEX: kubi-incidents
+#   ELASTICSEARCH_INDEX_EVENTS: kubi-events
+#   ELASTICSEARCH_INDEX_LOGS: kubi-pod-logs
+#   ELASTICSEARCH_INDEX_RCA: kubi-rca
+#   ELASTICSEARCH_INDEX_REMEDIATION: kubi-remediation
+#   ELASTICSEARCH_PASSWORD: ""
+#   ELASTICSEARCH_REPLICAS: "0"
+#   ELASTICSEARCH_SHARDS: "1"
+#   ELASTICSEARCH_USERNAME: ""
+#   FRONTEND_URL: http://kubi-frontend-service:80
+#   MONGODB_URL: mongodb://mongodb-service:27017
+# kind: ConfigMap
+# metadata:
+#   name: kubi-config
+#   namespace: kubi
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: kubi
+
+configMapGenerator:
+  - name: kubi-config
+    envs:
+      - .env
+
+generatorOptions:
+  disableNameSuffixHash: true
 ---
 apiVersion: v1
 kind: Service

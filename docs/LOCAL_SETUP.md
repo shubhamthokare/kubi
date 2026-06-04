@@ -32,13 +32,13 @@ For the fastest local setup, use Docker Compose to spin up all services with one
 
 ### Windows (PowerShell)
 ```powershell
-./deploy-docker.ps1
+./deploy.ps1 docker
 ```
 
 ### macOS / Linux (Bash)
 ```bash
-chmod +x deploy-docker.sh
-./deploy-docker.sh
+chmod +x deploy.sh
+./deploy.sh docker
 ```
 
 **Services will be available at:**
@@ -46,6 +46,14 @@ chmod +x deploy-docker.sh
 - 📡 **Backend API**: http://localhost:8000
 - 📊 **Elasticsearch**: http://localhost:9200
 - 🎯 **Kibana**: http://localhost:5601
+
+The Docker stack also uses the same public local URL defaults as the Kubernetes overlay:
+- `FRONTEND_URL=http://kubi.kontactless.in`
+- `BACKEND_URL=http://backend.kubi.kontactless.in`
+- `AGENT_URL=http://agent.kubi.kontactless.in`
+- `NEXT_PUBLIC_API_URL=http://backend.kubi.kontactless.in/api`
+
+Internal Docker service traffic still stays on Docker service names, such as `http://be:8000` and `http://agent:8080`.
 
 **View Logs:**
 ```bash
@@ -58,6 +66,34 @@ docker compose -f deploy/container/docker-compose.yml logs -f frontend  # Fronte
 ```bash
 docker compose -f deploy/container/docker-compose.yml down
 ```
+
+---
+
+## Minikube Local Access
+
+Use the local Kubernetes overlay when you want Kubi running inside Minikube:
+
+```bash
+minikube start --driver=docker
+minikube addons enable ingress
+kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=180s
+
+# Windows
+./deploy.ps1 minikube-local
+
+# macOS / Linux
+./deploy.sh minikube-local
+```
+
+`./deploy.ps1 minikube-local` and `./deploy.sh minikube-local` apply the local Ingress manifest, but they do not install the Minikube ingress controller. If `http://kubi.kontactless.in` does not open, verify the controller and ingress:
+
+```bash
+kubectl get pods -n ingress-nginx
+kubectl get ingress -n kubi
+minikube service kubi-frontend-service -n kubi
+```
+
+The local overlay gets `BACKEND_URL`, `AGENT_URL`, and `FRONTEND_URL` from `deploy/k8s/overlays/local/.env`. Kustomize generates `kubi-local-config` from that file and copies only those URL keys into `kubi-config`, so `configmap-patch.yaml` does not need manual URL edits.
 
 ---
 

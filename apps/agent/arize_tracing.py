@@ -76,14 +76,31 @@ SENSITIVE_HEADERS = {
 }
 
 
+def _env_enabled(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _production_arize_required(environment: str) -> bool:
+    return environment == "production" and _env_enabled("ARIZE_REQUIRE_DASHBOARD", False)
+
+
+def _missing_required_message() -> str:
+    return (
+        "Arize tracing is required for production audit mode but no valid Arize Cloud "
+        "credentials (ARIZE_SPACE_ID, ARIZE_API_KEY) or OTLP/Phoenix collector endpoint "
+        "(PHOENIX_COLLECTOR_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT) are configured."
+    )
+
+
 def _log_inactive_tracing(environment: str) -> None:
     """Log warning or info when tracing is unconfigured."""
+    if _production_arize_required(environment):
+        raise RuntimeError(_missing_required_message())
     if environment == "production":
-        logger.warning(
-            "Arize tracing not initialized: ENVIRONMENT is production but neither "
-            "Arize Cloud credentials (ARIZE_SPACE_ID, ARIZE_API_KEY) nor "
-            "local collector endpoints (PHOENIX_COLLECTOR_ENDPOINT) are set."
-        )
+        logger.warning(_missing_required_message())
     else:
         logger.info("Arize tracing is inactive (unconfigured).")
 
@@ -109,6 +126,8 @@ def _register_tracer(
     """Register either Arize Cloud or local OTel / Phoenix / standard OTel tracer provider."""
     if is_cloud_ready:
         if not HAS_ARIZE:
+            if _production_arize_required(os.getenv("ENVIRONMENT", "").lower()):
+                raise RuntimeError("Arize Cloud mode is required but arize-otel package is not installed.")
             logger.error("Arize Cloud mode requested but arize-otel package is not installed.")
             return None
         logger.info(f"Initializing Arize Cloud tracing for Kubi Agent (Project: {project_name})...")
@@ -154,11 +173,17 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
         TracerProvider if successfully initialized, None if unconfigured or failed.
     """
     
+    environment = os.getenv("ENVIRONMENT", "").lower()
     if not HAS_OTEL:
+        if _production_arize_required(environment):
+            raise RuntimeError("Arize tracing is required but OpenTelemetry libraries are not installed.")
         logger.info("Arize tracing is inactive (OpenTelemetry libraries not installed).")
         return None
 
-    environment = os.getenv("ENVIRONMENT", "").lower()
+    arize_enabled = _env_enabled("ARIZE_ENABLED", True)
+    if not arize_enabled and not _production_arize_required(environment):
+        logger.info("Arize tracing is disabled by ARIZE_ENABLED=false.")
+        return None
     
     # Get config variables
     space_id = os.getenv("ARIZE_SPACE_ID")
@@ -203,6 +228,8 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
         return tracer_provider
         
     except Exception as e:
+        if _production_arize_required(environment):
+            raise
         logging.exception(f"Failed to initialize Arize tracing: {e}", exc_info=True)
         return None
 
@@ -210,3 +237,17 @@ def initialize_arize_tracing() -> Optional[TracerProvider]:
 def get_tracer(name: str = "kubi-agent") -> trace.Tracer:
     """Get a tracer instance for creating custom spans."""
     return trace.get_tracer(name)
+
+
+def set_span_attributes(span, metadata: Optional[dict]) -> None:
+    if not metadata:
+        return
+    for key, value in metadata.items():
+        if value is None:
+            continue
+        if isinstance(value, (str, int, float, bool)):
+            span.set_attribute(key, value)
+        elif isinstance(value, list) and all(isinstance(item, (str, int, float, bool)) for item in value):
+            span.set_attribute(key, value)
+        else:
+            span.set_attribute(key, str(value))

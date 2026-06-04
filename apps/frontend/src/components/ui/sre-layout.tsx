@@ -7,9 +7,10 @@ export const SreCard = React.forwardRef<HTMLDivElement, CardProps>(
       ref={ref}
       elevation={0}
       sx={{
-        bgcolor: 'background.paper',
-        borderRadius: 3,
-        border: '1px solid rgba(255, 255, 255, 0.05)',
+        bgcolor: 'rgba(15, 23, 42, 0.68)',
+        borderRadius: 1,
+        border: '1px solid rgba(148, 163, 184, 0.12)',
+        boxShadow: 'none',
         ...sx,
       }}
       {...props}
@@ -26,8 +27,8 @@ export const SreConsole = React.forwardRef<HTMLDivElement, BoxProps>(
       ref={ref}
       sx={{
         bgcolor: '#020617',
-        borderRadius: 2.5,
-        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: 1,
+        border: '1px solid rgba(148, 163, 184, 0.14)',
         fontFamily: 'monospace',
         fontSize: '0.85rem',
         color: '#e2e8f0',
@@ -50,11 +51,10 @@ export const SreAuthCard = React.forwardRef<HTMLDivElement, CardProps>(
       elevation={0}
       sx={{
         p: 4.5,
-        bgcolor: 'rgba(30, 41, 59, 0.7)',
-        backdropFilter: 'blur(20px)',
-        border: '1px solid rgba(255, 255, 255, 0.05)',
-        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
-        borderRadius: 4,
+        bgcolor: 'rgba(15, 23, 42, 0.76)',
+        border: '1px solid rgba(148, 163, 184, 0.12)',
+        boxShadow: '0 20px 44px -24px rgba(0,0,0,0.7)',
+        borderRadius: 1,
         textAlign: 'center',
         ...sx,
       }}

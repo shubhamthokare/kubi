@@ -30,6 +30,7 @@ function Show-Usage {
     Write-Host "  render-prod        Render the production Kustomize overlay"
     Write-Host "  secrets-local      Apply local dummy Kubernetes secrets"
     Write-Host "  secrets-gcp        Apply GCP External Secrets resources"
+    Write-Host "  generate-secrets   Generate dummy secret templates (<local|gcp>)"
     Write-Host ""
     Write-Host "Aliases:"
     Write-Host "  start, dev -> start-local"
@@ -69,7 +70,11 @@ function Invoke-Kustomize($Path) {
 
 # Automatically configure Git to use shared .githooks folder
 if (Test-Path ".git") {
-    git config core.hooksPath .githooks 2>$null
+    try {
+        git config core.hooksPath .githooks 2>$null
+    } catch {
+        Write-Host "Warning: Could not configure Git hooks path; continuing deployment." -ForegroundColor Yellow
+    }
 }
 
 if ($Help -or [string]::IsNullOrWhiteSpace($Scenario) -or $Scenario -in @("-h", "--help", "help", "-help") -or ($Rest -and ($Rest -contains "--help" -or $Rest -contains "-h" -or $Rest -contains "help"))) {
@@ -79,7 +84,7 @@ if ($Help -or [string]::IsNullOrWhiteSpace($Scenario) -or $Scenario -in @("-h", 
 
 function Initialize-And-Propagate-Secrets {
     $RootEnv = "$Root\.env"
-    $RootExample = "$Root\.env.example"
+    $RootExample = "$Root\.example.env"
     $BackendEnv = "$Root\apps\backend\.env"
     
     # 1. Bootstrapping / Centralizing secrets
@@ -93,6 +98,26 @@ function Initialize-And-Propagate-Secrets {
             Write-Host "[Warning] Created centralized .env with dummy values. Please configure your actual secrets in $RootEnv!" -ForegroundColor Yellow
         }
     }
+    
+    # 1.5. Self-heal missing local & GCP secrets files from templates
+    $LocalEnvSecrets = "$Root\deploy\k8s\secrets\local\.env.local"
+    $LocalExampleSecrets = "$Root\.example.env.local"
+    if (-not (Test-Path $LocalEnvSecrets) -and (Test-Path $LocalExampleSecrets)) {
+        $dir = Split-Path -Parent $LocalEnvSecrets
+        if (-not (Test-Path $dir)) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        }
+        Copy-Item $LocalExampleSecrets $LocalEnvSecrets
+    }
+    $GcpEnvSecrets = "$Root\deploy\k8s\secrets\external\gcp\.env.gcp"
+    $GcpExampleSecrets = "$Root\.example.env.gcp"
+    if (-not (Test-Path $GcpEnvSecrets) -and (Test-Path $GcpExampleSecrets)) {
+        $dir = Split-Path -Parent $GcpEnvSecrets
+        if (-not (Test-Path $dir)) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        }
+        Copy-Item $GcpExampleSecrets $GcpEnvSecrets
+    }
 
     # 2. Load environment variables into current session
     Write-Host "Loading master secrets from $RootEnv..." -ForegroundColor Cyan
@@ -100,9 +125,80 @@ function Initialize-And-Propagate-Secrets {
         $parts = $_ -split '=', 2
         $key = $parts[0].Trim()
         $value = $parts[1].Trim()
+        if ($key -eq "KUBECONFIG" -and $value.StartsWith("~/")) {
+            $value = Join-Path $HOME $value.Substring(2)
+        }
         if ($value -ne "`${$parts[0].Trim()}" -and $value -ne "`$${parts[0].Trim()}") {
             [System.Environment]::SetEnvironmentVariable($key, $value)
         }
+    }
+
+    # Local overlay URL defaults. These can still be overridden in the root .env.
+    $LocalDomain = [System.Environment]::GetEnvironmentVariable("LOCAL_DOMAIN")
+    if ([string]::IsNullOrWhiteSpace($LocalDomain)) {
+        $LocalDomain = "kubi.kontactless.in"
+    }
+    $LocalUrlDefaults = @{
+        "FRONTEND_URL" = "http://$LocalDomain"
+        "BACKEND_URL" = "http://backend.$LocalDomain"
+        "AGENT_URL" = "http://agent.$LocalDomain"
+    }
+    foreach ($entry in $LocalUrlDefaults.GetEnumerator()) {
+        $existing = [System.Environment]::GetEnvironmentVariable($entry.Key)
+        if ([string]::IsNullOrWhiteSpace($existing)) {
+            [System.Environment]::SetEnvironmentVariable($entry.Key, $entry.Value)
+        }
+    }
+    $FrontendDefaults = @{
+        "NEXT_PUBLIC_API_URL" = "$([System.Environment]::GetEnvironmentVariable("BACKEND_URL"))/api"
+        "NEXT_PUBLIC_APP_URL" = [System.Environment]::GetEnvironmentVariable("FRONTEND_URL")
+        "NEXT_PUBLIC_AGENT_URL" = [System.Environment]::GetEnvironmentVariable("AGENT_URL")
+        "APP_URL" = [System.Environment]::GetEnvironmentVariable("FRONTEND_URL")
+    }
+    foreach ($entry in $FrontendDefaults.GetEnumerator()) {
+        $existing = [System.Environment]::GetEnvironmentVariable($entry.Key)
+        if ([string]::IsNullOrWhiteSpace($existing)) {
+            [System.Environment]::SetEnvironmentVariable($entry.Key, $entry.Value)
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable("EMAIL_PROVIDER"))) {
+        [System.Environment]::SetEnvironmentVariable("EMAIL_PROVIDER", "auto")
+    }
+    if ([string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable("SMTP_HOST"))) {
+        [System.Environment]::SetEnvironmentVariable("SMTP_HOST", "smtp.resend.com")
+    }
+    if ([string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable("SMTP_PORT"))) {
+        [System.Environment]::SetEnvironmentVariable("SMTP_PORT", "465")
+    }
+    if ([string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable("SMTP_USERNAME"))) {
+        [System.Environment]::SetEnvironmentVariable("SMTP_USERNAME", "resend")
+    }
+    if ([string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable("SMTP_USE_SSL"))) {
+        [System.Environment]::SetEnvironmentVariable("SMTP_USE_SSL", "true")
+    }
+    if ([string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable("SMTP_USE_TLS"))) {
+        [System.Environment]::SetEnvironmentVariable("SMTP_USE_TLS", "false")
+    }
+    if ([string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable("EMAIL_SENDER_MONTHLY_LIMIT"))) {
+        [System.Environment]::SetEnvironmentVariable("EMAIL_SENDER_MONTHLY_LIMIT", "3000")
+    }
+    if ([string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable("EMAIL_SENDER_SWITCH_AFTER"))) {
+        [System.Environment]::SetEnvironmentVariable("EMAIL_SENDER_SWITCH_AFTER", "2900")
+    }
+    if ([string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable("EMAIL_SENDER_USAGE_COLLECTION"))) {
+        [System.Environment]::SetEnvironmentVariable("EMAIL_SENDER_USAGE_COLLECTION", "email_sender_usage")
+    }
+    if ([string]::IsNullOrWhiteSpace([System.Environment]::GetEnvironmentVariable("SMTP_PASSWORD"))) {
+        $resendApiKey = [System.Environment]::GetEnvironmentVariable("RESEND_API_KEY")
+        if (-not [string]::IsNullOrWhiteSpace($resendApiKey)) {
+            [System.Environment]::SetEnvironmentVariable("SMTP_PASSWORD", $resendApiKey)
+        }
+    }
+
+    $senderPool = [System.Environment]::GetEnvironmentVariable("EMAIL_SENDER_POOL")
+    if (-not [string]::IsNullOrWhiteSpace($senderPool)) {
+        Write-Host "Email sender pool configured; monthly switch threshold: $([System.Environment]::GetEnvironmentVariable("EMAIL_SENDER_SWITCH_AFTER"))" -ForegroundColor Gray
     }
 
     # 3. Propagate relevant secrets to each component based on schema
@@ -114,7 +210,11 @@ function Initialize-And-Propagate-Secrets {
             "ELASTICSEARCH_INDEX", "ELASTICSEARCH_INDEX_LOGS", "ELASTICSEARCH_INDEX_EVENTS", 
             "ELASTICSEARCH_INDEX_RCA", "ELASTICSEARCH_INDEX_REMEDIATION", "ELASTICSEARCH_USERNAME", 
             "ELASTICSEARCH_PASSWORD", "ELASTICSEARCH_API_KEY", "ELASTICSEARCH_SHARDS", 
-            "ELASTICSEARCH_REPLICAS", "RESEND_API_KEY", "EMAIL_FROM", "OTP_EXPIRY_MINUTES", 
+            "ELASTICSEARCH_REPLICAS", "EMAIL_PROVIDER", "RESEND_API_KEY", "EMAIL_FROM",
+            "SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_USE_SSL", "SMTP_USE_TLS",
+            "EMAIL_SENDER_POOL", "EMAIL_SENDER_MONTHLY_LIMIT", "EMAIL_SENDER_SWITCH_AFTER",
+            "EMAIL_SENDER_USAGE_COLLECTION",
+            "OTP_EXPIRY_MINUTES",
             "JWT_SECRET_KEY", "ARIZE_SPACE_ID", "ARIZE_API_KEY", "ARIZE_PROJECT_NAME", 
             "GLOBAL_DOMAIN", "LOCAL_DOMAIN", "SERVICE_SUBDOMAIN", "DOMAIN_NAME"
         )
@@ -126,12 +226,17 @@ function Initialize-And-Propagate-Secrets {
         "apps/frontend/.env.local" = @(
             "NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_AGENT_URL"
         )
-        "deploy/k8s/secrets/local/local.env" = @(
-            "DB_PASSWORD", "RESEND_API_KEY", "JWT_SECRET_KEY", "GEMINI_API_KEY", 
+        "deploy/k8s/secrets/local/.env.local" = @(
+            "DB_PASSWORD", "RESEND_API_KEY", "SMTP_PASSWORD", "EMAIL_SENDER_POOL", "JWT_SECRET_KEY", "GEMINI_API_KEY",
             "GITLAB_TOKEN", "ARIZE_SPACE_ID", "ARIZE_API_KEY", "SSO_CLIENT_ID", "SSO_CLIENT_SECRET"
         )
         "deploy/local/playwright/.env" = @(
             "MONGODB_URL", "DATABASE_NAME", "APP_URL"
+        )
+        "deploy/k8s/overlays/local/.env" = @(
+            "BACKEND_URL", "AGENT_URL", "FRONTEND_URL", "EMAIL_PROVIDER", "EMAIL_FROM",
+            "SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_USE_SSL", "SMTP_USE_TLS",
+            "EMAIL_SENDER_MONTHLY_LIMIT", "EMAIL_SENDER_SWITCH_AFTER", "EMAIL_SENDER_USAGE_COLLECTION"
         )
     }
 
@@ -158,6 +263,23 @@ function Initialize-And-Propagate-Secrets {
                 $key = ($trimmed -split "=", 2)[0].Trim()
                 if ($key -in $allowedKeys) {
                     $filteredContent += $line
+                }
+            }
+        }
+
+        $existingKeys = @{}
+        foreach ($line in $filteredContent) {
+            $trimmed = $line.Trim()
+            if ($trimmed -match "=" -and -not $trimmed.StartsWith("#")) {
+                $existingKey = ($trimmed -split "=", 2)[0].Trim()
+                $existingKeys[$existingKey] = $true
+            }
+        }
+        foreach ($key in $allowedKeys) {
+            if (-not $existingKeys.ContainsKey($key)) {
+                $value = [System.Environment]::GetEnvironmentVariable($key)
+                if (-not [string]::IsNullOrWhiteSpace($value)) {
+                    $filteredContent += "$key=$value"
                 }
             }
         }
@@ -196,7 +318,11 @@ switch ($Scenario.ToLowerInvariant()) {
             Write-Host "Deployment Complete! All services started in the background." -ForegroundColor Green
             Write-Host "--------------------------------------------------"
             Write-Host "Access the Dashboard at:" -ForegroundColor Green
+            Write-Host "  $([System.Environment]::GetEnvironmentVariable("FRONTEND_URL"))"
             Write-Host "  http://localhost:3000"
+            Write-Host "Backend API:" -ForegroundColor Green
+            Write-Host "  $([System.Environment]::GetEnvironmentVariable("BACKEND_URL"))"
+            Write-Host "  http://localhost:8000"
             Write-Host ""
             Write-Host "Monitor the status of your services:" -ForegroundColor Cyan
             Write-Host "  docker compose -f deploy/container/docker-compose.yml ps"
@@ -537,6 +663,60 @@ switch ($Scenario.ToLowerInvariant()) {
         Write-Host "  Background jobs stopped."
         Write-Host "Done."
         break
+    }
+    "generate-secrets" {
+        $SubMode = "all"
+        if ($Rest -and $Rest.Count -gt 0) {
+            $SubMode = $Rest[0].ToLowerInvariant()
+        }
+        
+        $Targets = @()
+        if ($SubMode -eq "local") {
+            $Targets += [PSCustomObject]@{
+                Source = ".example.env.local"
+                Target = "deploy/k8s/secrets/local/.env.local"
+            }
+        } elseif ($SubMode -eq "gcp") {
+            $Targets += [PSCustomObject]@{
+                Source = ".example.env.gcp"
+                Target = "deploy/k8s/secrets/external/gcp/.env.gcp"
+            }
+        } elseif ($SubMode -eq "all") {
+            $Targets += [PSCustomObject]@{
+                Source = ".example.env.local"
+                Target = "deploy/k8s/secrets/local/.env.local"
+            }
+            $Targets += [PSCustomObject]@{
+                Source = ".example.env.gcp"
+                Target = "deploy/k8s/secrets/external/gcp/.env.gcp"
+            }
+        } else {
+            Write-Host "Kubi secret template helper"
+            Write-Host ""
+            Write-Host "Usage:"
+            Write-Host "  .\deploy.ps1 generate-secrets [local|gcp]"
+            Write-Host "  (Omitting argument will generate both templates by default)"
+            Write-Host ""
+            Write-Host "Sources & Outputs:"
+            Write-Host "  local:"
+            Write-Host "    Source: .example.env.local"
+            Write-Host "    Target: deploy/k8s/secrets/local/.env.local"
+            Write-Host "  gcp:"
+            Write-Host "    Source: .example.env.gcp"
+            Write-Host "    Target: deploy/k8s/secrets/external/gcp/.env.gcp"
+            exit 0
+        }
+
+        foreach ($item in $Targets) {
+            $TargetPath = Join-Path $Root $item.Target
+            if (Test-Path $TargetPath) {
+                Write-Host "Already exists: $($item.Target)"
+            } else {
+                Copy-Item (Join-Path $Root $item.Source) $TargetPath
+                Write-Host "Created $($item.Target) with dummy values."
+            }
+        }
+        exit 0
     }
     default {
         Write-Host "Unknown scenario '$Scenario'." -ForegroundColor Red

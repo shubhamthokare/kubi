@@ -11,12 +11,23 @@ This document provides a comprehensive reference of all important build, deploy,
 **Quick Start (All-in-One)**
 ```bash
 # Windows (PowerShell)
-./deploy-docker.ps1
+./deploy.ps1 docker
 
 # macOS / Linux
-chmod +x deploy-docker.sh
-./deploy-docker.sh
+chmod +x deploy.sh
+./deploy.sh docker
 ```
+
+Docker uses the local public URL defaults from the deployment scripts:
+
+```bash
+FRONTEND_URL=http://kubi.kontactless.in
+BACKEND_URL=http://backend.kubi.kontactless.in
+AGENT_URL=http://agent.kubi.kontactless.in
+NEXT_PUBLIC_API_URL=http://backend.kubi.kontactless.in/api
+```
+
+Backend-to-agent and agent-to-backend calls inside Docker still use internal service names such as `http://agent:8080` and `http://be:8000`.
 
 **Manual Docker Compose Commands**
 ```bash
@@ -46,17 +57,24 @@ docker compose -f deploy/container/docker-compose.yml up --build be
 **Quick Start (Automated)**
 ```bash
 # Windows (PowerShell)
-./deploy-minikube.ps1
+./deploy.ps1 minikube-local
 
 # macOS / Linux
-chmod +x deploy-minikube.sh
-./deploy-minikube.sh
+chmod +x deploy.sh
+./deploy.sh minikube-local
 ```
+
+`deploy/k8s/overlays/local/.env` is generated from root `.env` values and script defaults. Kustomize creates `kubi-local-config` from that file and copies only `BACKEND_URL`, `AGENT_URL`, and `FRONTEND_URL` into `kubi-config`, so local URL changes should go through `.env` or the deployment scripts instead of manual edits to `configmap-patch.yaml`.
 
 **Manual Kubernetes Commands**
 ```bash
 # Start Minikube
 minikube start --driver=docker
+
+# Enable local ingress controller before using kubi.kontactless.in
+minikube addons enable ingress
+kubectl rollout status deployment/ingress-nginx-controller -n ingress-nginx --timeout=180s
+kubectl get pods -n ingress-nginx
 
 # Stop Minikube
 minikube stop
@@ -89,6 +107,9 @@ kubectl port-forward -n kubi svc/kubi-frontend-service 3000:3000
 
 # Open Minikube service in browser
 minikube service kubi-frontend-service -n kubi
+
+# Check local ingress object
+kubectl get ingress -n kubi
 
 # Scale deployment
 kubectl scale deployment kubi-backend -n kubi --replicas=3

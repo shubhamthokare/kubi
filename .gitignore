@@ -62,7 +62,7 @@ share/python-wheels/
 *.egg
 
 # Virtual environments
-.env
+.env*
 .venv
 venv/
 ENV/
@@ -143,17 +143,12 @@ deploy/playwright/node_modules/
 # ──────────────────────────────────────────────────────────────────────────────
 # Environment Configs & Secrets (DO NOT COMMIT SENSITIVE KEYS)
 # ──────────────────────────────────────────────────────────────────────────────
-# Local environment configs
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-apps/backend/.env
-apps/frontend/.env.local
-deploy/k8s/base/.env
+# All files starting with .env must be ignored
+.env*
+**/.env*
 
-# Allow sample template envs
-!**/.env.example
+# Allow template/example configurations
+!**/.example.env*
 
 # SSL Keys & Certificates
 *.pem
@@ -204,6 +199,7 @@ deploy/k8s/secrets/local/*.private.env
 deploy/k8s/secrets/local/local.env.private
 deploy/k8s/secrets/external/gcp/*.json
 deploy/k8s/secrets/external/gcp/*.private.env
+*/local.env
 
 # Added by ggshield
 .cache_ggshield

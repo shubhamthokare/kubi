@@ -60,7 +60,7 @@ class IncidentDetectionWorkflow:
             pod_name = pod["name"]
             pod_ns = pod["namespace"]
             pod_uid = pod["uid"]
-            pod_id = f"{pod_ns}-{pod_name}-{pod_uid}"
+            pod_id = f"{pod_ns}-{pod_name}"
             current_failed_pod_ids.append(pod_id)
             
             has_owner = pod.get("has_owner", False)
@@ -151,15 +151,42 @@ class IncidentDetectionWorkflow:
             from app.services.gemini_service import tokens_tracker
             token_token = tokens_tracker.set(0)
             try:
-                rca_result = await self.gemini_service.analyze_incident(pod_name, pod_status_str, combined_logs)
-                remediation_plan = await self.gemini_service.generate_remediation_plan(pod_name, rca_result, combined_logs)
+                rca_result, rca_generated_by = await self.gemini_service.analyze_incident(pod_name, pod_status_str, combined_logs)
+                remediation_plan, plan_generated_by = await self.gemini_service.generate_remediation_plan(
+                    pod_name,
+                    rca_result,
+                    combined_logs,
+                    resource_context=pod,
+                )
                 total_tokens = tokens_tracker.get()
             finally:
                 tokens_tracker.reset(token_token)
             
             plan_id = None
             if remediation_plan:
-                plan_id = await self.remediation_workflow.store_plan(remediation_plan, tokens_consumed=total_tokens)
+                # Check if there's an existing plan for this incident to create parent-child lineage
+                old_plan_id = None
+                if existing_incident and existing_incident.get("plan_id"):
+                    old_plan = await db.plans.find_one({"plan_id": existing_incident["plan_id"]})
+                    # Only link as parent if old plan is in a state that warrants superseding
+                    if old_plan and old_plan.get("status") in ["pending_approval", "failed_execution", "failed_verification", "rejected"]:
+                        old_plan_id = existing_incident["plan_id"]
+                
+                plan_id = await self.remediation_workflow.store_plan(
+                    remediation_plan, 
+                    tokens_consumed=total_tokens,
+                    parent_plan_id=old_plan_id,
+                    generated_by=plan_generated_by,
+                    resource_context=pod,
+                )
+                
+                # Mark old plan as superseded
+                if old_plan_id:
+                    await db.plans.update_one(
+                        {"plan_id": old_plan_id},
+                        {"$set": {"status": "superseded", "superseded_by": plan_id}}
+                    )
+                    logger.info(f"Marked plan {sanitize_log(old_plan_id)} as superseded by {sanitize_log(plan_id)}")
                 
                 # Auto-trigger GitLab pipeline if enabled and plan contains trigger_gitlab_pipeline action
                 if gitlab_enabled and plan_id and not loop_detected:
@@ -186,6 +213,7 @@ class IncidentDetectionWorkflow:
                         "plan_summary": remediation_plan.summary if remediation_plan else None,
                         "plan_id": plan_id,
                         "plan_actions": [a.model_dump() for a in remediation_plan.actions] if remediation_plan else [],
+                        "resource_context": pod,
                         "ai_failed": plan_id is None,
                         "error_type": "API_KEY_BLOCKED" if plan_id is None and "API_KEY_SERVICE_BLOCKED" in rca_result else "GENERIC_FAILURE" if plan_id is None else None,
                         "cluster_id": cluster_id,

@@ -24,6 +24,7 @@ class RemediationAction(BaseModel):
 class RemediationPlan(BaseModel):
     actions: list[RemediationAction] = Field(description="List of ordered actions to remediate the incident")
     summary: str = Field(description="A brief summary of the incident and the proposed plan")
+    resource_context: dict | None = Field(default=None, description="Normalized Kubernetes resource capability and constraint context")
 
 class GeminiService:
     def __init__(self):
@@ -348,7 +349,11 @@ class GeminiService:
             logger.warning(f"All AI pathways failed in generate_postmortem: {e}. Falling back to simulation.")
             return self._simulated_postmortem(incident_data)
 
-    async def analyze_incident(self, pod_name: str, pod_status: str, logs: str) -> str:
+    async def analyze_incident(self, pod_name: str, pod_status: str, logs: str) -> tuple[str, str]:
+        """
+        Analyzes an incident and returns (rca_result, generated_by) tuple.
+        generated_by is "ai" for real AI generation or "rule-based" for fallback simulation.
+        """
         profile = await self._get_token_profile()
         
         # Configure limits based on token profile
@@ -387,10 +392,12 @@ class GeminiService:
         ### ⚡ Actionable Recovery Steps
         """
         try:
-            return await self._generate_with_fallback(prompt, max_output_tokens=max_tokens)
+            result = await self._generate_with_fallback(prompt, max_output_tokens=max_tokens)
+            return (result, "ai")
         except Exception as e:
             logger.warning(f"All AI pathways failed in analyze_incident: {e}. Falling back to simulation.")
-            return self._simulated_rca(pod_name, pod_status, logs)
+            result = self._simulated_rca(pod_name, pod_status, logs)
+            return (result, "rule-based")
 
     async def validate_connection(self, data: dict = None) -> dict:
         """Explicitly tests the Gemini API connection and returns detailed status."""
@@ -512,7 +519,52 @@ class GeminiService:
             logging.exception(f"Error retrieving historical context from MongoDB fallback: {e}")
             return "Error retrieving historical context."
 
-    async def generate_remediation_plan(self, pod_name: str, rca_text: str, logs: str) -> RemediationPlan | None:
+    def _format_resource_context(self, resource_context: dict | None) -> str:
+        if not resource_context:
+            return "Resource Context: unavailable. Do not infer ownership from pod name unless no owner data is available."
+
+        is_bare_pod = resource_context.get("is_bare_pod")
+        controller_kind = resource_context.get("controller_kind")
+        controller_name = resource_context.get("controller_name")
+        rollback_target = resource_context.get("rollback_target")
+        rollback_allowed = controller_kind == "Deployment" and bool(rollback_target)
+        valid_actions = resource_context.get("valid_actions") or []
+        invalid_actions = resource_context.get("invalid_actions") or resource_context.get("blocked_actions") or []
+
+        return (
+            "Resource Context:\n"
+            f"- Namespace: {resource_context.get('namespace', 'default')}\n"
+            f"- Resource: {resource_context.get('resource_kind', 'Pod')} {resource_context.get('resource_name') or resource_context.get('name')}\n"
+            f"- Scenario: {resource_context.get('scenario') or resource_context.get('status_reason') or resource_context.get('reason')}\n"
+            f"- Status reason: {resource_context.get('status_reason') or resource_context.get('reason')}\n"
+            f"- Event reasons: {resource_context.get('event_reasons', [])}\n"
+            f"- Pod has owner: {resource_context.get('has_owner')}\n"
+            f"- Bare pod: {is_bare_pod}\n"
+            f"- Immediate owner: {resource_context.get('owner_kind')} {resource_context.get('owner_name')}\n"
+            f"- Top-level controller: {controller_kind} {controller_name}\n"
+            f"- Rollback target: {rollback_target}\n"
+            f"- Rollback allowed: {rollback_allowed}\n"
+            f"- Valid actions: {valid_actions}\n"
+            f"- Blocked actions: {invalid_actions}\n"
+            f"- Redemption guidance: {resource_context.get('redemption_guidance')}\n"
+            "Decision Rules:\n"
+            "- Only recommend actions listed in Valid actions. Never recommend actions listed in Blocked actions.\n"
+            "- If Bare pod is true or Rollback allowed is false, do not use rollback_deployment or restart_deployment.\n"
+            "- For a bare pod, prefer restart_pod or apply_manifest with an actionable reason.\n"
+            "- If Top-level controller is Deployment, deployment actions must target Rollback target, not the pod name."
+        )
+
+    async def generate_remediation_plan(
+        self,
+        pod_name: str,
+        rca_text: str,
+        logs: str,
+        resource_context: dict | None = None,
+    ) -> tuple[RemediationPlan | None, str]:
+        """
+        Generates a remediation plan and returns (plan, generated_by) tuple.
+        generated_by is "ai" for real AI generation or "rule-based" for fallback simulation.
+        """
         profile = await self._get_token_profile()
         
         # Configure limits based on token profile
@@ -530,6 +582,7 @@ class GeminiService:
             log_limit = 15
             
         historical_context = await self.get_historical_context(rca_text)
+        resource_context_text = self._format_resource_context(resource_context)
         
         # Truncate RCA and logs context to reduce prompt size
         if rca_text and len(rca_text) > rca_limit:
@@ -547,19 +600,43 @@ class GeminiService:
         RCA: {rca_text}
         Recent Logs:
         {logs}
+
+        {resource_context_text}
         
         {historical_context}
         
-        Action Types: 'restart_pod', 'restart_deployment', 'rollback_deployment', 'trigger_gitlab_pipeline'.
+        Action Types: 'restart_pod', 'restart_deployment', 'rollback_deployment', 'trigger_gitlab_pipeline', 'apply_manifest'.
         Guidelines: Be highly decisive, prioritize stability, keep summary very concise.
         """
         try:
-            res_text = await self._generate_with_fallback(prompt, schema=RemediationPlan, max_output_tokens=max_tokens)
+            try:
+                from app.core.arize_tracing import get_tracer, set_span_attributes
+                tracer = get_tracer("kubi.remediation")
+            except Exception:
+                tracer = None
+
+            if tracer:
+                with tracer.start_as_current_span("ai.gemini_remediation_plan") as span:
+                    set_span_attributes(span, {
+                        "pod_name": pod_name,
+                        "namespace": (resource_context or {}).get("namespace", "default"),
+                        "scenario": (resource_context or {}).get("scenario"),
+                        "resource_kind": (resource_context or {}).get("resource_kind"),
+                        "resource_name": (resource_context or {}).get("resource_name") or pod_name,
+                        "valid_actions": (resource_context or {}).get("valid_actions", []),
+                        "invalid_actions": (resource_context or {}).get("invalid_actions", []),
+                    })
+                    res_text = await self._generate_with_fallback(prompt, schema=RemediationPlan, max_output_tokens=max_tokens)
+            else:
+                res_text = await self._generate_with_fallback(prompt, schema=RemediationPlan, max_output_tokens=max_tokens)
             data = json.loads(res_text)
-            return RemediationPlan(**data)
+            plan = RemediationPlan(**data)
+            plan.resource_context = resource_context
+            return (plan, "ai")
         except Exception as e:
             logger.warning(f"All AI pathways failed in generate_remediation_plan: {e}. Falling back to simulation.")
-            return self._simulated_remediation_plan(pod_name, rca_text, logs)
+            plan = self._simulated_remediation_plan(pod_name, rca_text, logs, resource_context=resource_context)
+            return (plan, "rule-based")
 
     def _simulated_rca(self, pod_name: str, pod_status: str, logs: str) -> str:
         """Rule-based smart SRE helper to generate a fallback RCA when Gemini is unavailable."""
@@ -605,19 +682,32 @@ class GeminiService:
                    f"Reviewing pod event logs shows that the resource allocations, readiness/liveness probes, or node scheduling constraints might be misconfigured.\n\n" \
                    f"**Recommendation:** Verify the resource limits/requests and check liveness/readiness probe definitions."
 
-    def _simulated_remediation_plan(self, pod_name: str, rca_text: str, logs: str) -> RemediationPlan:
+    def _simulated_remediation_plan(
+        self,
+        pod_name: str,
+        rca_text: str,
+        logs: str,
+        resource_context: dict | None = None,
+    ) -> RemediationPlan:
         """Rule-based smart SRE helper to generate a fallback RemediationPlan when Gemini is unavailable."""
         actions = []
         lower_rca = rca_text.lower() if rca_text else ""
         lower_logs = logs.lower() if logs else ""
+        has_resource_context = bool(resource_context)
+        resource_context = resource_context or {}
+        controller_kind = resource_context.get("controller_kind")
+        rollback_target = resource_context.get("rollback_target")
+        is_bare_pod = resource_context.get("is_bare_pod")
+        if is_bare_pod is None:
+            is_bare_pod = resource_context.get("has_owner") is False if has_resource_context else pod_name == "failing-pod"
         
-        target_name = pod_name
+        target_name = rollback_target or pod_name
         if "-" in pod_name:
             parts = pod_name.split("-")
-            if len(parts) >= 3 and len(parts[-1]) == 5 and len(parts[-2]) >= 8:
+            if not rollback_target and len(parts) >= 3 and len(parts[-1]) == 5 and len(parts[-2]) >= 8:
                 target_name = "-".join(parts[:-2])
         
-        namespace = "default"
+        namespace = resource_context.get("namespace") or "default"
         if "namespace:" in lower_logs:
             try:
                 namespace = logs.split("namespace:")[1].split()[0].strip()
@@ -625,15 +715,19 @@ class GeminiService:
                 pass
                 
         if "image pull" in lower_rca or "imagepullbackoff" in lower_rca:
-            summary = "Automatic rollback of deployment to last stable version due to image pull failure."
-            if pod_name == "failing-pod":
+            if is_bare_pod:
+                summary = "Bare pod has an image pull failure; no deployment rollout history exists."
                 actions.append(RemediationAction(
                     action_type="restart_pod",
                     target_name=pod_name,
                     namespace=namespace,
-                    reason=f"Delete and recreate standalone pod '{pod_name}' to trigger a fresh image pull sequence."
+                    reason=(
+                        f"Pod '{pod_name}' is not managed by a Deployment, so rollback is unavailable. "
+                        "Recreate the pod or apply a corrected manifest/image."
+                    )
                 ))
-            else:
+            elif controller_kind == "Deployment" or rollback_target or not has_resource_context:
+                summary = "Automatic rollback of deployment to last stable version due to image pull failure."
                 actions.append(RemediationAction(
                     action_type="rollback_deployment",
                     target_name=target_name,
@@ -646,9 +740,17 @@ class GeminiService:
                     namespace=namespace,
                     reason=f"Perform a rolling restart on '{target_name}' to ensure configuration stability."
                 ))
+            else:
+                summary = "Pod has an image pull failure but no rollback-capable Deployment was confirmed."
+                actions.append(RemediationAction(
+                    action_type="restart_pod",
+                    target_name=pod_name,
+                    namespace=namespace,
+                    reason="Ownership context does not confirm a Deployment rollback target; use pod-level recovery."
+                ))
         else:
-            summary = f"Rolling restart of the service to clear temporary state or resolve bootstrap lockups."
-            if pod_name == "failing-pod":
+            if is_bare_pod:
+                summary = "Restart bare pod to clear temporary state or resolve bootstrap lockups."
                 actions.append(RemediationAction(
                     action_type="restart_pod",
                     target_name=pod_name,
@@ -656,6 +758,7 @@ class GeminiService:
                     reason=f"Force restart bare pod '{pod_name}' to attempt recovery."
                 ))
             else:
+                summary = f"Rolling restart of the service to clear temporary state or resolve bootstrap lockups."
                 actions.append(RemediationAction(
                     action_type="restart_deployment",
                     target_name=target_name,
@@ -665,7 +768,8 @@ class GeminiService:
                 
         return RemediationPlan(
             actions=actions,
-            summary=summary
+            summary=summary,
+            resource_context=resource_context or None,
         )
 
     def _simulated_postmortem(self, incident_data: dict) -> str:

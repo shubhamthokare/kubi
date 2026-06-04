@@ -32,6 +32,18 @@ spec:
             secretKeyRef:
               name: kubi-secrets
               key: RESEND_API_KEY
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: kubi-secrets
+              key: SMTP_PASSWORD
+              optional: true
+        - name: EMAIL_SENDER_POOL
+          valueFrom:
+            secretKeyRef:
+              name: kubi-secrets
+              key: EMAIL_SENDER_POOL
+              optional: true
         - name: JWT_SECRET_KEY
           valueFrom:
             secretKeyRef:
@@ -96,6 +108,56 @@ spec:
               name: kubi-config
               key: CORS_ORIGINS
         # ── Elasticsearch ─────────────────────────────────────────
+        - name: EMAIL_PROVIDER
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: EMAIL_PROVIDER
+        - name: EMAIL_FROM
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: EMAIL_FROM
+        - name: SMTP_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: SMTP_HOST
+        - name: SMTP_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: SMTP_PORT
+        - name: SMTP_USERNAME
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: SMTP_USERNAME
+        - name: SMTP_USE_SSL
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: SMTP_USE_SSL
+        - name: SMTP_USE_TLS
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: SMTP_USE_TLS
+        - name: EMAIL_SENDER_MONTHLY_LIMIT
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: EMAIL_SENDER_MONTHLY_LIMIT
+        - name: EMAIL_SENDER_SWITCH_AFTER
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: EMAIL_SENDER_SWITCH_AFTER
+        - name: EMAIL_SENDER_USAGE_COLLECTION
+          valueFrom:
+            configMapKeyRef:
+              name: kubi-config
+              key: EMAIL_SENDER_USAGE_COLLECTION
         - name: ELASTICSEARCH_HOST
           valueFrom:
             configMapKeyRef:

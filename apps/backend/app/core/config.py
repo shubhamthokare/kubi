@@ -56,8 +56,19 @@ class Settings(BaseSettings):
     ELASTIC_MCP_URL: str = get_secret("ELASTIC_MCP_URL", "http://localhost:8000")
 
     # ── Email / OTP Settings ────────────────────────────────────────
+    EMAIL_PROVIDER: str = get_secret("EMAIL_PROVIDER", "auto")
     RESEND_API_KEY: str = get_secret("RESEND_API_KEY", "")
     EMAIL_FROM: str = get_secret("EMAIL_FROM", "no-reply@kubi.ai")
+    SMTP_HOST: str = get_secret("SMTP_HOST", "smtp.resend.com")
+    SMTP_PORT: int = int(get_secret("SMTP_PORT", "465"))
+    SMTP_USERNAME: str = get_secret("SMTP_USERNAME", "resend")
+    SMTP_PASSWORD: str = get_secret("SMTP_PASSWORD", get_secret("RESEND_API_KEY", ""))
+    SMTP_USE_SSL: str = get_secret("SMTP_USE_SSL", "true")
+    SMTP_USE_TLS: str = get_secret("SMTP_USE_TLS", "false")
+    EMAIL_SENDER_POOL: str = get_secret("EMAIL_SENDER_POOL", "")
+    EMAIL_SENDER_MONTHLY_LIMIT: int = int(get_secret("EMAIL_SENDER_MONTHLY_LIMIT", "3000"))
+    EMAIL_SENDER_SWITCH_AFTER: int = int(get_secret("EMAIL_SENDER_SWITCH_AFTER", "2900"))
+    EMAIL_SENDER_USAGE_COLLECTION: str = get_secret("EMAIL_SENDER_USAGE_COLLECTION", "email_sender_usage")
     OTP_EXPIRY_MINUTES: int = int(get_secret("OTP_EXPIRY_MINUTES", "10"))
 
     JWT_SECRET_KEY: str = get_secret("JWT_SECRET_KEY", "kubi-sre-secret-key-change-me-in-production")

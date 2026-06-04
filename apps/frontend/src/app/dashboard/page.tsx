@@ -158,6 +158,29 @@ export default function DashboardPage() {
   const isSystemHealthy =
     stats.nodes.total > 0 && stats.pods.failed === 0 && stats.nodes.total === stats.nodes.ready;
 
+  const getPlanTargetKey = (plan: any): string => {
+    const firstAction = plan.plan?.actions?.[0];
+    const namespaceKey = firstAction?.namespace || plan.namespace || "default";
+    const targetKey = firstAction?.target_name || plan.pod_name || plan.plan_id;
+    return `${namespaceKey}:${targetKey}`;
+  };
+
+  const getPlanSortKey = (plan: any): string => String(plan._id || plan.plan_id || "");
+
+  const pendingApprovalsCount = Array.from(
+    data.plans
+      .filter((plan: any) => plan.status === "pending_approval" && !plan.superseded_by)
+      .reduce((latestByTarget: Map<string, any>, plan: any) => {
+        const key = getPlanTargetKey(plan);
+        const existing = latestByTarget.get(key);
+        if (!existing || getPlanSortKey(plan) > getPlanSortKey(existing)) {
+          latestByTarget.set(key, plan);
+        }
+        return latestByTarget;
+      }, new Map<string, any>())
+      .values(),
+  ).length;
+
   // Use real-time resources for filters
   const namespaces = data.resources.namespaces;
   const deployments = data.resources.deployments;
@@ -183,11 +206,11 @@ export default function DashboardPage() {
   });
 
   return (
-    <Container maxWidth="xl" sx={{ py: 1 }}>
+    <Container maxWidth={false} disableGutters sx={{ py: 0 }}>
       {/* Top Header Row (Full Width) */}
-      <Box sx={{ mb: 4, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' }, gap: 3 }}>
+      <Box className="ops-page-header" sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' }, gap: 2.5 }}>
         <Box>
-          <Typography variant="h3" fontWeight="900" color="white" sx={{ letterSpacing: '-0.04em', mb: 0.5, fontSize: { xs: '2rem', md: '2.5rem' } }}>
+          <Typography variant="h4" fontWeight="850" color="white" sx={{ mb: 0.75, fontSize: { xs: '1.75rem', md: '2rem' } }}>
             Cluster Overview
           </Typography>
           <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
@@ -235,13 +258,12 @@ export default function DashboardPage() {
               fontSize: '0.85rem',
               fontWeight: '800',
               textTransform: 'none',
-              borderRadius: 2.5,
+              borderRadius: 1,
               py: 1.25,
-              px: 3.5,
+              px: 2.5,
               border: '1px solid rgba(255,255,255,0.1)',
               '&:hover': {
                 background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
-                transform: 'translateY(-2px)',
                 boxShadow: '0 6px 20px rgba(59, 130, 246, 0.35)',
               },
               transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
@@ -255,12 +277,11 @@ export default function DashboardPage() {
               bgcolor: 'rgba(255,255,255,0.02)', 
               color: 'rgba(255,255,255,0.7)',
               border: '1px solid rgba(255,255,255,0.06)',
-              borderRadius: 2.5,
+              borderRadius: 1,
               p: 1.25,
               '&:hover': { 
                 bgcolor: 'rgba(255,255,255,0.06)',
                 color: 'white',
-                transform: 'translateY(-2px)'
               },
               transition: 'all 0.2s ease'
             }}
@@ -271,11 +292,11 @@ export default function DashboardPage() {
       </Box>
 
       {/* Responsive Vitals Metrics Cards Grid (Row 2 - Spans 4 Columns) */}
-      <Grid container spacing={3} sx={{ mb: 5 }}>
+      <Grid container spacing={2.5} sx={{ mb: 3 }}>
         {/* Card 1: Node Capacity */}
         <Grid item xs={12} sm={6} lg={3}>
           <Card className="glass glass-hover" elevation={0}>
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 2.5 }}>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
                 <Typography variant="caption" color="rgba(255,255,255,0.5)" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   Node Capacity
@@ -284,7 +305,7 @@ export default function DashboardPage() {
                   <Server size={18} color="#60a5fa" />
                 </Box>
               </Stack>
-              <Typography variant="h4" fontWeight="950" color="white" sx={{ mb: 1, letterSpacing: '-0.02em' }}>
+              <Typography variant="h4" fontWeight="850" color="white" sx={{ mb: 0.75 }}>
                 {Math.round((stats.nodes.ready / (stats.nodes.total || 1)) * 100)}%
               </Typography>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
@@ -310,7 +331,7 @@ export default function DashboardPage() {
         {/* Card 2: Pod Health */}
         <Grid item xs={12} sm={6} lg={3}>
           <Card className="glass glass-hover" elevation={0}>
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 2.5 }}>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
                 <Typography variant="caption" color="rgba(255,255,255,0.5)" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   Pod Health
@@ -319,7 +340,7 @@ export default function DashboardPage() {
                   <Activity size={18} color="#10b981" />
                 </Box>
               </Stack>
-              <Typography variant="h4" fontWeight="950" color="white" sx={{ mb: 1, letterSpacing: '-0.02em' }}>
+              <Typography variant="h4" fontWeight="850" color="white" sx={{ mb: 0.75 }}>
                 {Math.round((stats.pods.running / (stats.pods.total || 1)) * 100)}%
               </Typography>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
@@ -345,7 +366,7 @@ export default function DashboardPage() {
         {/* Card 3: Stability */}
         <Grid item xs={12} sm={6} lg={3}>
           <Card className="glass glass-hover" elevation={0}>
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 2.5 }}>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
                 <Typography variant="caption" color="rgba(255,255,255,0.5)" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   Stability Index
@@ -354,7 +375,7 @@ export default function DashboardPage() {
                   <Globe size={18} color="#a78bfa" />
                 </Box>
               </Stack>
-              <Typography variant="h4" fontWeight="950" color="white" sx={{ mb: 1, letterSpacing: '-0.02em' }}>
+              <Typography variant="h4" fontWeight="850" color="white" sx={{ mb: 0.75 }}>
                 {isSystemHealthy ? "100%" : "85%"}
               </Typography>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
@@ -382,7 +403,7 @@ export default function DashboardPage() {
         {/* Card 4: Automation Brain */}
         <Grid item xs={12} sm={6} lg={3}>
           <Card className="glass glass-hover" elevation={0}>
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 2.5 }}>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
                 <Typography variant="caption" color="rgba(255,255,255,0.5)" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   Autonomous Status
@@ -430,16 +451,17 @@ export default function DashboardPage() {
                 elevation={0}
                 sx={{
                   bgcolor: "background.paper",
-                  borderRadius: 3,
+                  borderRadius: 1,
                   height: "100%",
+                  border: "1px solid rgba(148, 163, 184, 0.12)",
                 }}
               >
-                <CardContent sx={{ p: 4 }}>
+                <CardContent sx={{ p: 3 }}>
                   <Stack
                     direction="row"
                     justifyContent="space-between"
                     alignItems="center"
-                    sx={{ mb: 4 }}
+                    sx={{ mb: 3 }}
                   >
                     <Box>
                       <Typography
@@ -450,7 +472,7 @@ export default function DashboardPage() {
                       >
                         System Status
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" color="text.secondary">
                         Real-time monitoring across all services
                       </Typography>
                     </Box>
@@ -480,7 +502,7 @@ export default function DashboardPage() {
                           p: 2,
                           bgcolor: "rgba(248, 113, 113, 0.05)",
                           border: "1px solid rgba(248, 113, 113, 0.1)",
-                          borderRadius: 2,
+                          borderRadius: 1,
                         }}
                       >
                         <Stack spacing={1}>
@@ -523,7 +545,7 @@ export default function DashboardPage() {
                           p: 2,
                           bgcolor: "rgba(96, 165, 250, 0.05)",
                           border: "1px solid rgba(96, 165, 250, 0.1)",
-                          borderRadius: 2,
+                          borderRadius: 1,
                         }}
                       >
                         <Stack spacing={1}>
@@ -566,7 +588,7 @@ export default function DashboardPage() {
                           p: 2,
                           bgcolor: "rgba(52, 211, 153, 0.05)",
                           border: "1px solid rgba(52, 211, 153, 0.1)",
-                          borderRadius: 2,
+                          borderRadius: 1,
                         }}
                       >
                         <Stack spacing={1}>
@@ -610,7 +632,7 @@ export default function DashboardPage() {
                           p: 2,
                           bgcolor: "rgba(251, 191, 36, 0.05)",
                           border: "1px solid rgba(251, 191, 36, 0.1)",
-                          borderRadius: 2,
+                          borderRadius: 1,
                         }}
                       >
                         <Stack spacing={1}>
@@ -640,11 +662,7 @@ export default function DashboardPage() {
                               fontWeight="bold"
                               color="white"
                             >
-                              {
-                                data.plans.filter(
-                                  (p: any) => p.status === "pending_approval",
-                                ).length
-                              }
+                              {pendingApprovalsCount}
                             </Typography>
                           </Stack>
                         </Stack>
@@ -661,11 +679,12 @@ export default function DashboardPage() {
                 elevation={0}
                 sx={{
                   bgcolor: "background.paper",
-                  borderRadius: 3,
+                  borderRadius: 1,
                   height: "100%",
+                  border: "1px solid rgba(148, 163, 184, 0.12)",
                 }}
               >
-                <CardContent sx={{ p: 4 }}>
+                <CardContent sx={{ p: 3 }}>
                   <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
                     <Typography
                       variant="h6"
@@ -682,7 +701,7 @@ export default function DashboardPage() {
                         sx={{
                           color: 'white',
                           bgcolor: 'rgba(255,255,255,0.02)',
-                          borderRadius: 2,
+                          borderRadius: 1,
                           '& fieldset': { borderColor: 'rgba(255,255,255,0.1)' },
                           '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.2)' },
                           '& .MuiSelect-select': { py: 0.75, fontSize: '0.8rem' }
@@ -727,7 +746,7 @@ export default function DashboardPage() {
                             sx={{
                               p: 1.5,
                               bgcolor: "#0f172a",
-                              borderRadius: 2,
+                              borderRadius: 1,
                               border: "1px solid rgba(255,255,255,0.05)",
                             }}
                           >
